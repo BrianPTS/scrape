@@ -132,16 +132,16 @@ const EventsTableModern = memo(function EventsTableModern({
         </div>
       )
     },
-    { 
-      name: <Header title="Rows" description="Available seat count" icon={<Users size={14} />} />, 
-      selector: r => seatCounts[r._id] || r.Available_Seats || 0, 
-      sortable: true, 
-      right: true, 
+    {
+      name: <Header title="Rows" description="Available seat count" icon={<Users size={14} />} />,
+      selector: r => seatCounts[r._id] || r.Available_Seats || 0,
+      sortable: true,
+      right: true,
       width: '100px',
       cell: r => {
         const seatCount = seatCounts[r._id];
         const availableSeats = r.Available_Seats || 0;
-        
+
         if (loadingSeatCounts && seatCount === undefined) {
           return (
             <div className="flex items-center justify-end" aria-live="polite" aria-label="Loading seat count">
@@ -149,7 +149,7 @@ const EventsTableModern = memo(function EventsTableModern({
             </div>
           );
         }
-        
+
         return (
           <div className="text-right space-y-1">
             <div className="font-bold text-slate-900 text-lg">
@@ -159,6 +159,47 @@ const EventsTableModern = memo(function EventsTableModern({
               <div className="text-xs text-slate-500">
                 DB: {availableSeats.toLocaleString()}
               </div>
+            )}
+          </div>
+        );
+      }
+    },
+    {
+      name: <Header title="Inventory" description="Venue capacity and seats for sale" />,
+      selector: r => r.seatsForSale || 0,
+      sortable: true,
+      width: '140px',
+      cell: r => {
+        const capacity = r.venueCapacity || 0;
+        const forSale = r.seatsForSale || 0;
+        const soldPercent = capacity > 0 ? Math.round((1 - forSale / capacity) * 100) : 0;
+
+        if (capacity === 0 && forSale === 0) {
+          return (
+            <div className="text-center text-xs text-slate-400">
+              No data
+            </div>
+          );
+        }
+
+        return (
+          <div className="text-center space-y-1">
+            <div className="text-xs text-slate-500">
+              <span className="font-semibold text-slate-700">{forSale.toLocaleString()}</span> for sale
+            </div>
+            {capacity > 0 && (
+              <>
+                <div className="text-xs text-slate-400">
+                  of {capacity.toLocaleString()} total
+                </div>
+                <div className={`text-xs font-bold px-2 py-0.5 rounded-full inline-block ${
+                  soldPercent >= 80 ? 'bg-red-100 text-red-700' :
+                  soldPercent >= 50 ? 'bg-amber-100 text-amber-700' :
+                  'bg-green-100 text-green-700'
+                }`}>
+                  {soldPercent}% sold
+                </div>
+              </>
             )}
           </div>
         );
