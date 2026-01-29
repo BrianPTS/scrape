@@ -1,6 +1,7 @@
 "use client"
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { getAllEvents, updateEvent, updateAllEvents, deleteEvent } from '@/actions/eventActions';
+import { deleteStaleInventory } from '@/actions/seatActions';
 import { Calendar, ChevronLeft, ChevronRight, RefreshCw, Search, X, SlidersHorizontal } from 'lucide-react';
 import EventsTableModern from './EventsTableModern.jsx';
 
@@ -21,6 +22,8 @@ export default function EventsPage() {
   const [deleteMessage, setDeleteMessage] = useState('');
   const [deleteMessageType, setDeleteMessageType] = useState(''); // 'success' or 'error'
   const [togglingEvents, setTogglingEvents] = useState(new Set()); // Track events being toggled
+  const [scheduledCleanups, setScheduledCleanups] = useState(new Map()); // Track scheduled cleanup timers
+  const cleanupTimeoutsRef = useRef(new Map()); // Ref to store timeout IDs for cleanup
   
   // Advanced filter states
   const [filters, setFilters] = useState({
@@ -82,6 +85,17 @@ export default function EventsPage() {
     }, 15000); // 15 seconds
 
     return () => clearInterval(interval);
+  }, []);
+
+  // Cleanup timeouts on component unmount
+  useEffect(() => {
+    return () => {
+      // Clear all pending cleanup timeouts
+      cleanupTimeoutsRef.current.forEach((timeoutId) => {
+        clearTimeout(timeoutId);
+      });
+      cleanupTimeoutsRef.current.clear();
+    };
   }, []);
 
   // Advanced filter function
@@ -163,6 +177,57 @@ export default function EventsPage() {
   const totalPages = Math.ceil(filteredEvents.length / eventsPerPage);
   const paginatedEvents = filteredEvents.slice((currentPage - 1) * eventsPerPage, currentPage * eventsPerPage);
 
+  // Schedule automatic stale inventory cleanup after 1 minute
+  const scheduleStaleCleanup = (eventId, eventName) => {
+    // Clear any existing timeout for this event
+    if (cleanupTimeoutsRef.current.has(eventId)) {
+      clearTimeout(cleanupTimeoutsRef.current.get(eventId));
+    }
+
+    const scheduledTime = new Date(Date.now() + 60000); // 1 minute from now
+
+    // Update UI to show scheduled cleanup
+    setScheduledCleanups(prev => {
+      const newMap = new Map(prev);
+      newMap.set(eventId, scheduledTime);
+      return newMap;
+    });
+
+    console.log(`Scheduling automatic stale inventory cleanup for event "${eventName}" in 1 minute...`);
+
+    // Schedule the cleanup
+    const timeoutId = setTimeout(async () => {
+      console.log(`Running automatic stale inventory cleanup for event "${eventName}"...`);
+      try {
+        const result = await deleteStaleInventory();
+        if (result.success) {
+          console.log(`Automatic cleanup completed: ${result.message}`);
+          // Show success message briefly
+          setDeleteMessage(`Auto-cleanup completed: ${result.deletedCount || 0} stale inventory groups removed`);
+          setDeleteMessageType('success');
+          setTimeout(() => {
+            setDeleteMessage('');
+            setDeleteMessageType('');
+          }, 5000);
+        } else {
+          console.error('Automatic cleanup failed:', result.error);
+        }
+      } catch (error) {
+        console.error('Error during automatic cleanup:', error);
+      } finally {
+        // Remove from scheduled cleanups
+        setScheduledCleanups(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(eventId);
+          return newMap;
+        });
+        cleanupTimeoutsRef.current.delete(eventId);
+      }
+    }, 60000); // 1 minute delay
+
+    cleanupTimeoutsRef.current.set(eventId, timeoutId);
+  };
+
   // Toggle Skip_Scraping for an event
   const toggleScraping = async (id, skip) => {
     // Prevent multiple simultaneous toggles for the same event
@@ -174,22 +239,41 @@ export default function EventsPage() {
     try {
       // Add event to toggling set
       setTogglingEvents(prev => new Set(prev).add(id));
-      
+
       const result = await updateEvent(id, { Skip_Scraping: !skip });
-      
+
       if (result.error) {
         console.error('Failed to toggle scraping:', result.error);
         // Show user-friendly error message
         alert(`Failed to ${skip ? 'start' : 'stop'} scraping: ${result.error}`);
         return;
       }
-      
+
       // Only update state after successful server response
       setEvents(prev => prev.map(e => e._id === id ? { ...e, Skip_Scraping: !skip } : e));
-      
+
       // Log seat deletion if it occurred
       if (result.deletedSeatGroups > 0) {
         console.log(`Scraping stopped for event. Deleted ${result.deletedSeatGroups} seat groups.`);
+      }
+
+      // If we're stopping scraping (pausing the event), schedule automatic stale cleanup after 1 minute
+      if (!skip) {
+        // skip was false, so we're now setting Skip_Scraping to true (pausing)
+        const eventName = events.find(e => e._id === id)?.Event_Name || 'Unknown Event';
+        scheduleStaleCleanup(id, eventName);
+      } else {
+        // If we're starting scraping again, cancel any pending cleanup for this event
+        if (cleanupTimeoutsRef.current.has(id)) {
+          clearTimeout(cleanupTimeoutsRef.current.get(id));
+          cleanupTimeoutsRef.current.delete(id);
+          setScheduledCleanups(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(id);
+            return newMap;
+          });
+          console.log('Cancelled pending cleanup for restarted event');
+        }
       }
     } catch (err) {
       console.error('Failed to toggle scraping:', err);
@@ -222,19 +306,36 @@ export default function EventsPage() {
       // If all events are active (not skipping), then stop all (set to true)
       // If not all events are active, then start all (set to false)
       const newStatus = allActive;
-      
+
       const result = await updateAllEvents(newStatus);
-      
+
       if (result.success) {
         // Refresh events to reflect the changes
         await fetchEvents(true);
-        
+
         // Show more detailed message including seat deletion info
         let message = `Successfully ${newStatus ? 'stopped' : 'started'} scraping for all events`;
         if (result.deletedSeatGroups > 0) {
           message += `. Deleted ${result.deletedSeatGroups} seat groups.`;
         }
         console.log(message);
+
+        // If we stopped all scraping, schedule automatic stale cleanup after 1 minute
+        if (newStatus) {
+          scheduleStaleCleanup('all-events', 'All Events');
+        } else {
+          // If we started all scraping, cancel any pending cleanup
+          if (cleanupTimeoutsRef.current.has('all-events')) {
+            clearTimeout(cleanupTimeoutsRef.current.get('all-events'));
+            cleanupTimeoutsRef.current.delete('all-events');
+            setScheduledCleanups(prev => {
+              const newMap = new Map(prev);
+              newMap.delete('all-events');
+              return newMap;
+            });
+            console.log('Cancelled pending cleanup for all events');
+          }
+        }
       } else {
         console.error('Failed to update events:', result.error);
       }
@@ -429,6 +530,27 @@ export default function EventsPage() {
           </button>
         </div>
       </header>
+
+      {/* Scheduled Cleanup Indicator */}
+      {scheduledCleanups.size > 0 && (
+        <div className="mb-6 p-4 rounded-lg border bg-blue-50 border-blue-200 text-blue-800">
+          <div className="flex items-center">
+            <div className="flex-shrink-0 w-5 h-5 mr-3 text-blue-500">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="animate-spin">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium">
+                Automatic stale inventory cleanup scheduled for {scheduledCleanups.size} event{scheduledCleanups.size > 1 ? 's' : ''} (will run in ~1 minute)
+              </p>
+              <p className="text-xs mt-1 text-blue-600">
+                The cleanup will automatically remove stale inventory after the delay. You can continue working.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Feedback Message */}
       {deleteMessage && (
