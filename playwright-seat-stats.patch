@@ -1,0 +1,253 @@
+From 953a33f37d2c8390836f2b956cf646e3eb3417f9 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 29 Jan 2026 19:23:44 +0000
+Subject: [PATCH] Add venue capacity and seats for sale tracking
+
+- Add seatCounter.js helper to count venue capacity and seats for sale
+- Update Event model with venueCapacity and seatsForSale fields
+- Calculate seat stats from Map API (capacity) and Facet API (for sale)
+- Store stats in database after each successful scrape
+
+https://claude.ai/code/session_015XRotx8uwwAdupB9MxLRfN
+---
+ helpers/seatCounter.js | 150 +++++++++++++++++++++++++++++++++++++++++
+ models/eventModel.js   |   8 +++
+ scraper.js             |  12 +++-
+ scraperManager.js      |   7 +-
+ 4 files changed, 174 insertions(+), 3 deletions(-)
+ create mode 100644 helpers/seatCounter.js
+
+diff --git a/helpers/seatCounter.js b/helpers/seatCounter.js
+new file mode 100644
+index 0000000..84b8519
+--- /dev/null
++++ b/helpers/seatCounter.js
+@@ -0,0 +1,150 @@
++/**
++ * Seat Counter Helper
++ *
++ * Calculates venue capacity and seats for sale from Ticketmaster API responses.
++ */
++
++/**
++ * Count total seats in venue from Map API response (venue capacity)
++ * @param {Object} mapData - Response from mapsapi.tmol.io
++ * @returns {number} Total number of seats in the venue
++ */
++export function countVenueCapacity(mapData) {
++  let totalSeats = 0;
++
++  if (!mapData || !mapData.pages || !mapData.pages.length) {
++    return 0;
++  }
++
++  try {
++    const page = mapData.pages[0];
++    if (!page.segments) return 0;
++
++    // Traverse the nested structure: pages -> segments -> segments (sections) -> segments (rows) -> placesNoKeys
++    page.segments.forEach((composit) => {
++      if (composit?.segments) {
++        composit.segments.forEach((section) => {
++          if (section.segments && section.segments.length > 0) {
++            // Has rows
++            section.segments.forEach((row) => {
++              if (row.placesNoKeys && Array.isArray(row.placesNoKeys)) {
++                totalSeats += row.placesNoKeys.length;
++              }
++            });
++          } else if (section.placesNoKeys && Array.isArray(section.placesNoKeys)) {
++            // General Admission - seats directly under section
++            totalSeats += section.placesNoKeys.length;
++          }
++        });
++      }
++    });
++  } catch (error) {
++    console.error('[SeatCounter] Error counting venue capacity:', error.message);
++  }
++
++  return totalSeats;
++}
++
++/**
++ * Count total seats for sale from Facet API response
++ * @param {Object} facetData - Response from services.ticketmaster.com facets API
++ * @returns {number} Total number of individual seats for sale
++ */
++export function countSeatsForSale(facetData) {
++  let totalSeats = 0;
++
++  if (!facetData || !facetData.facets || !Array.isArray(facetData.facets)) {
++    return 0;
++  }
++
++  try {
++    facetData.facets.forEach((facet) => {
++      if (facet.places && Array.isArray(facet.places)) {
++        // Each facet has compressed place codes
++        // We need to decompress and count them
++        facet.places.forEach((placeString) => {
++          // The places are in a compressed format like "[1,2,3]" or nested
++          // Count the actual seat IDs
++          const seatCount = countPlacesInString(placeString);
++          totalSeats += seatCount;
++        });
++      }
++    });
++  } catch (error) {
++    console.error('[SeatCounter] Error counting seats for sale:', error.message);
++  }
++
++  return totalSeats;
++}
++
++/**
++ * Count seats in a compressed place string
++ * Place strings can be like: "ABC123" or "[ABC123,ABC124]" or nested
++ * @param {string} placeString - Compressed place string
++ * @returns {number} Number of seats in the string
++ */
++function countPlacesInString(placeString) {
++  if (!placeString || typeof placeString !== 'string') {
++    return 0;
++  }
++
++  // Simple approach: count by parsing the structure
++  // The string format is like nested arrays: [a[b,c],d[e,f]]
++  // Each leaf node is a seat
++
++  let count = 0;
++  let depth = 0;
++  let currentToken = '';
++
++  for (let i = 0; i < placeString.length; i++) {
++    const char = placeString[i];
++
++    if (char === '[') {
++      depth++;
++    } else if (char === ']') {
++      if (currentToken.length > 0) {
++        count++;
++        currentToken = '';
++      }
++      depth--;
++    } else if (char === ',') {
++      if (currentToken.length > 0) {
++        count++;
++        currentToken = '';
++      }
++    } else {
++      currentToken += char;
++    }
++  }
++
++  // Handle case where there's a token at the end
++  if (currentToken.length > 0) {
++    count++;
++  }
++
++  // If no brackets, it's a single seat
++  if (count === 0 && placeString.length > 0) {
++    count = 1;
++  }
++
++  return count;
++}
++
++/**
++ * Get both capacity and seats for sale in one call
++ * @param {Object} mapData - Response from Map API
++ * @param {Object} facetData - Response from Facet API
++ * @returns {Object} { venueCapacity, seatsForSale }
++ */
++export function getSeatStats(mapData, facetData) {
++  return {
++    venueCapacity: countVenueCapacity(mapData),
++    seatsForSale: countSeatsForSale(facetData)
++  };
++}
++
++export default {
++  countVenueCapacity,
++  countSeatsForSale,
++  getSeatStats
++};
+diff --git a/models/eventModel.js b/models/eventModel.js
+index 79ca2a3..e65ef79 100644
+--- a/models/eventModel.js
++++ b/models/eventModel.js
+@@ -33,6 +33,14 @@ const eventSchema = new mongoose.Schema(
+       type: Number,
+       default: 0,
+     },
++    venueCapacity: {
++      type: Number,
++      default: 0,
++    },
++    seatsForSale: {
++      type: Number,
++      default: 0,
++    },
+     Skip_Scraping: {
+       type: Boolean,
+       default: true,
+diff --git a/scraper.js b/scraper.js
+index e4fb2ba..0fb74ce 100644
+--- a/scraper.js
++++ b/scraper.js
+@@ -7,6 +7,7 @@ const fs = require("fs");
+ // Removed old proxy import - now using database
+ import { AttachRowSection } from "./helpers/seatBatch.js";
+ import GenerateNanoPlaces from "./helpers/seats.js";
++import { getSeatStats } from "./helpers/seatCounter.js";
+ import crypto from "crypto";
+ import { BrowserFingerprint } from "./browserFingerprint.js";
+ import pThrottle from 'p-throttle';
+@@ -1082,11 +1083,18 @@ async function callTicketmasterAPI(facetHeader, proxyAgent, eventId, event, mapH
+         throw delayError;
+       }
+       
++      // Calculate venue capacity and seats for sale
++      const seatStats = getSeatStats(DataMap, DataFacets);
++
+       console.log(
+         `Event ${eventId} scrape successful - ${seatCount} seat groups found ` +
+-        `(validation: ${validation.reason}, fluctuation: ${validation.fluctuationPercent || 0}%)`
++        `(validation: ${validation.reason}, fluctuation: ${validation.fluctuationPercent || 0}%) ` +
++        `[Venue capacity: ${seatStats.venueCapacity}, Seats for sale: ${seatStats.seatsForSale}]`
+       );
+-      
++
++      // Attach stats to result for use in metadata update
++      result.seatStats = seatStats;
++
+       return result;
+     } catch (processError) {
+       console.error(`Error processing API response for event ${eventId}:`, processError.message);
+diff --git a/scraperManager.js b/scraperManager.js
+index acd9849..abfddd8 100644
+--- a/scraperManager.js
++++ b/scraperManager.js
+@@ -1028,12 +1028,17 @@ export class ScraperManager {
+       // fs.writeFileSync("debug/validScrapeResult.json", result);
+       const currentTicketCount = validScrapeResult.length;
+ 
+-        // Quick update of basic info
++      // Extract seat stats if available (venue capacity and seats for sale)
++      const seatStats = validScrapeResult.seatStats || {};
++
++        // Quick update of basic info including seat stats
+         await Event.updateOne(
+           { Event_ID: eventId },
+           {
+             $set: {
+               Available_Seats: currentTicketCount,
++              venueCapacity: seatStats.venueCapacity || 0,
++              seatsForSale: seatStats.seatsForSale || 0,
+               Last_Updated: new Date(), // Ensure Last_Updated is always set to now
+               "metadata.lastUpdate": new Date(),
+               "metadata.ticketCount": currentTicketCount,
+-- 
+2.43.0
+
