@@ -33,6 +33,16 @@ const eventSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    venueCapacity: {
+      type: Number,
+      default: 0,
+      description: "Total number of seats in the venue"
+    },
+    seatsForSale: {
+      type: Number,
+      default: 0,
+      description: "Total number of individual seats currently for sale"
+    },
     Skip_Scraping: {
       type: Boolean,
       default: true,
