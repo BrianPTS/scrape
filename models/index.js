@@ -3,3 +3,4 @@ export { ConsecutiveGroup } from "./seatModel.js";
 export { ErrorLog } from "./errorModel.js";
 export { SchedulerSettings } from "./schedulerModel.js";
 export { Proxy } from "./proxyModel.js";
+export { GameTagScheduler } from "./gameTagSchedulerModel.js";
