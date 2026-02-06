@@ -1,0 +1,147 @@
+From c0f79d212a046eeacb27ab1a0448ce4df455c96b Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 6 Feb 2026 15:32:58 +0000
+Subject: [PATCH] Fix: Always use highest price when seat has multiple offers
+
+When a seat has multiple price options (e.g., Standard $45 + Kids $0),
+the scraper now always selects the offer with the highest total price
+(faceValue + charges).
+
+Changes:
+- seats.js: Pass all offer IDs instead of selecting by shortest string
+- seatBatch.js: Add selectHighestPricedOffer() function to choose
+  the highest priced offer from multiple options
+- Preserve allOfferIds through all data transformations
+
+This ensures the CSV always contains the adult/standard price,
+not promotional or kids ticket prices.
+
+https://claude.ai/code/session_015XRotx8uwwAdupB9MxLRfN
+---
+ helpers/seatBatch.js | 51 ++++++++++++++++++++++++++++++++++++++++++--
+ helpers/seats.js     | 12 +++++------
+ 2 files changed, 55 insertions(+), 8 deletions(-)
+
+diff --git a/helpers/seatBatch.js b/helpers/seatBatch.js
+index cb935fe..93e0b1a 100644
+--- a/helpers/seatBatch.js
++++ b/helpers/seatBatch.js
+@@ -1,7 +1,42 @@
+ import moment from "moment";
+ import { formatInHandDate } from "../utils/dateUtils.js";
+ import * as fs from 'fs';
+-// Function to generate unique 10-digit inventory ID
++
++/**
++ * Select the offer with the highest price from multiple offer IDs
++ * @param {Array<string>} offerIds - Array of offer IDs
++ * @param {Array<Object>} allOffers - Array of all offer objects with prices
++ * @returns {Object|null} The offer with the highest price, or null if none found
++ */
++function selectHighestPricedOffer(offerIds, allOffers) {
++  if (!offerIds || offerIds.length === 0 || !allOffers || allOffers.length === 0) {
++    return null;
++  }
++
++  // Find all matching offers
++  const matchingOffers = offerIds
++    .map(id => allOffers.find(o => o.offerId === id))
++    .filter(Boolean);
++
++  if (matchingOffers.length === 0) {
++    return null;
++  }
++
++  // If only one offer, return it
++  if (matchingOffers.length === 1) {
++    return matchingOffers[0];
++  }
++
++  // Select the offer with the highest total price (faceValue + charges)
++  return matchingOffers.reduce((highest, current) => {
++    const currentTotal = (current.faceValue || 0) +
++      (current.charges?.reduce((sum, c) => sum + (c.amount || 0), 0) || 0);
++    const highestTotal = (highest.faceValue || 0) +
++      (highest.charges?.reduce((sum, c) => sum + (c.amount || 0), 0) || 0);
++
++    return currentTotal > highestTotal ? current : highest;
++  }, matchingOffers[0]);
++}
+ 
+ // Global Filters
+ const GLOBAL_FILTERS = {
+@@ -133,6 +168,7 @@ function CreateConsicutiveSeats(data) {
+         row: item.row,
+         seats: [...item.seats].sort((a, b) => a - b), // Ensure seats are sorted
+         offerId: item.offerId,
++        allOfferIds: item.allOfferIds, // NEW: Preserve all offer IDs for price comparison
+         accessibility: item?.accessibility,
+         descriptionId: item?.descriptionId,
+         attributes: item?.attributes,
+@@ -394,6 +430,7 @@ export const AttachRowSection = (
+         seats: allPlaces,
+         eventId: event?.eventMappingId,
+         offerId: x.offerId,
++        allOfferIds: x.allOfferIds, // NEW: Preserve all offer IDs for price comparison
+         accessibility: x?.accessibility,
+         descriptionId: x?.descriptionId,
+         attributes: x?.attributes,
+@@ -412,6 +449,7 @@ export const AttachRowSection = (
+         seats: seatsInRow,
+         eventId: seatGroup.eventId,
+         offerId: seatGroup.offerId,
++        allOfferIds: seatGroup.allOfferIds, // NEW: Preserve all offer IDs for price comparison
+         accessibility: seatGroup.accessibility,
+         descriptionId: seatGroup.descriptionId,
+         attributes: seatGroup.attributes,
+@@ -462,7 +500,16 @@ export const AttachRowSection = (
+ 
+   const finalData = returnData
+       .map((x) => {
+-        let offerGet = offers.find((e) => e.offerId == x.offerId);
++        // Use highest priced offer when multiple offers exist for the same seat
++        // This ensures we always use the adult/standard price, not kids/promo prices
++        let offerGet;
++        if (x.allOfferIds && x.allOfferIds.length > 1) {
++          // Multiple offers available - select highest priced one
++          offerGet = selectHighestPricedOffer(x.allOfferIds, offers);
++        } else {
++          // Single offer or no allOfferIds - use original logic
++          offerGet = offers.find((e) => e.offerId == x.offerId);
++        }
+ 
+         // Check accessibility exclusion filters first
+         if (GLOBAL_FILTERS.excludeAccessibility) {
+diff --git a/helpers/seats.js b/helpers/seats.js
+index 50e91a5..62603ad 100644
+--- a/helpers/seats.js
++++ b/helpers/seats.js
+@@ -132,9 +132,9 @@ class Cluster {
+                 row: x.row || "",
+                 section: x.section || "",
+                 selection: x?.inventoryTypes.length > 0 ? x?.inventoryTypes[0] : "",
+-                offerId: x?.offers.length > 0 ? x?.offers.length>1?x?.offers.reduce((shortest, current) => {
+-                  return current.length < shortest.length ? current : shortest;
+-                }):x?.offers[0] : "",
++                // Pass ALL offer IDs - selection of highest price happens in seatBatch.js
++                offerId: x?.offers.length > 0 ? x?.offers[0] : "",
++                allOfferIds: x?.offers || [], // NEW: Pass all offer IDs for price comparison
+                 listingId: "",
+                 places: [placeCode],
+                 seats: [],
+@@ -153,9 +153,9 @@ class Cluster {
+             row: x.row || "",
+             section: x.section || "",
+             selection: x?.inventoryTypes.length > 0 ? x?.inventoryTypes[0] : "",
+-            offerId: x?.offers.length > 0 ? x?.offers.length>1?x?.offers.reduce((shortest, current) => {
+-                return current.length < shortest.length ? current : shortest;
+-              }):x?.offers[0] : "",
++            // Pass ALL offer IDs - selection of highest price happens in seatBatch.js
++            offerId: x?.offers.length > 0 ? x?.offers[0] : "",
++            allOfferIds: x?.offers || [], // NEW: Pass all offer IDs for price comparison
+             listingId: "",
+             places: x?.places,
+             seats: [],
+-- 
+2.43.0
+
