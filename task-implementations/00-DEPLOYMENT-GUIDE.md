@@ -14,6 +14,7 @@
 | TPTS-030 | Playwright eventModel sync | Ready | 1 hour |
 | TPTS-031 | Auto-cleanup stale inventory | Ready | 2 hours |
 | TPTS-032 | Event Capacity/Seats Available | Ready | 3 hours |
+| TPTS-033 | Always use highest price for multi-offer seats | Ready | 1 hour |
 
 ---
 
@@ -785,6 +786,108 @@ See file: `AUTO-POPULATE-game-tag.js` for complete implementation.
 
 ---
 
+## 2.9 TPTS-033: Always Use Highest Price for Multi-Offer Seats
+
+**Problem:** When a Ticketmaster seat has multiple price offers (e.g., "Standard Admission $45" and "Kids Tickets $0"), the scraper was selecting the offer based on shortest ID string length instead of price.
+
+**Fix:** Always select the offer with the highest total price (faceValue + fees).
+
+### Apply the Patch
+
+```bash
+cd /path/to/playwright-repo
+git apply /path/to/scrape/playwright-highest-price.patch
+```
+
+### Manual Changes (if patch doesn't apply cleanly)
+
+#### 1. Update `helpers/seats.js`
+
+Replace the offerId selection logic (appears twice, around lines 135 and 156):
+
+**BEFORE:**
+```javascript
+offerId: x?.offers.length > 0 ? x?.offers.length>1?x?.offers.reduce((shortest, current) => {
+  return current.length < shortest.length ? current : shortest;
+}):x?.offers[0] : "",
+```
+
+**AFTER:**
+```javascript
+// Pass ALL offer IDs - selection of highest price happens in seatBatch.js
+offerId: x?.offers.length > 0 ? x?.offers[0] : "",
+allOfferIds: x?.offers || [], // NEW: Pass all offer IDs for price comparison
+```
+
+#### 2. Update `helpers/seatBatch.js`
+
+Add this function at the top of the file (after imports):
+
+```javascript
+/**
+ * Select the offer with the highest price from multiple offer IDs
+ * @param {Array<string>} offerIds - Array of offer IDs
+ * @param {Array<Object>} allOffers - Array of all offer objects with prices
+ * @returns {Object|null} The offer with the highest price, or null if none found
+ */
+function selectHighestPricedOffer(offerIds, allOffers) {
+  if (!offerIds || offerIds.length === 0 || !allOffers || allOffers.length === 0) {
+    return null;
+  }
+
+  // Find all matching offers
+  const matchingOffers = offerIds
+    .map(id => allOffers.find(o => o.offerId === id))
+    .filter(Boolean);
+
+  if (matchingOffers.length === 0) {
+    return null;
+  }
+
+  // If only one offer, return it
+  if (matchingOffers.length === 1) {
+    return matchingOffers[0];
+  }
+
+  // Select the offer with the highest total price (faceValue + charges)
+  return matchingOffers.reduce((highest, current) => {
+    const currentTotal = (current.faceValue || 0) +
+      (current.charges?.reduce((sum, c) => sum + (c.amount || 0), 0) || 0);
+    const highestTotal = (highest.faceValue || 0) +
+      (highest.charges?.reduce((sum, c) => sum + (c.amount || 0), 0) || 0);
+
+    return currentTotal > highestTotal ? current : highest;
+  }, matchingOffers[0]);
+}
+```
+
+Replace the offer lookup logic in `AttachRowSection`:
+
+**BEFORE:**
+```javascript
+let offerGet = offers.find((e) => e.offerId == x.offerId);
+```
+
+**AFTER:**
+```javascript
+// Use highest priced offer when multiple offers exist for the same seat
+let offerGet;
+if (x.allOfferIds && x.allOfferIds.length > 1) {
+  // Multiple offers available - select highest priced one
+  offerGet = selectHighestPricedOffer(x.allOfferIds, offers);
+} else {
+  // Single offer or no allOfferIds - use original logic
+  offerGet = offers.find((e) => e.offerId == x.offerId);
+}
+```
+
+Also add `allOfferIds` to all data structures that pass through:
+- `CreateConsicutiveSeats` merged object
+- `customData` return object
+- `groupedSeats` push object
+
+---
+
 # PART 3: MONGODB MIGRATION SCRIPT
 
 Run this ONCE after deploying both repos:
@@ -883,6 +986,11 @@ db.events.findOne({}, {
 - [ ] Events table shows "Inventory" column with correct data
 - [ ] % sold badge shows correct color
 
+## TPTS-033: Highest Price Selection
+- [ ] Scrape an event that has seats with multiple offers (Standard + Kids)
+- [ ] Verify CSV shows the higher price (Standard), not the lower price (Kids)
+- [ ] Check console logs show correct offer being selected
+
 ---
 
 # PART 5: FILE INDEX
@@ -894,9 +1002,11 @@ db.events.findOne({}, {
 | `TPTS-025-notes-in-csv-export.js` | CSV notes export implementation |
 | `TPTS-026-bulk-edit-functionality.js` | Bulk edit implementation |
 | `TPTS-027-venue-type-dropdown.js` | Venue type dropdown implementation |
+| `TPTS-033-use-highest-price.js` | Highest price selection implementation |
 | `AUTO-POPULATE-game-tag.js` | Auto -game tag implementation |
 | `PLAYWRIGHT-REPO-eventModel-changes.js` | Complete eventModel for playwright |
 | `playwright-seat-stats.patch` | Patch file for seat stats in playwright |
+| `playwright-highest-price.patch` | Patch file for highest price selection |
 
 ---
 
