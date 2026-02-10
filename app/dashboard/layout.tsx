@@ -66,14 +66,16 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
       icon: <SignalHigh className="w-5 h-5" />,
       isActive: true,
     },
-  ];
-
-  const comingSoonItems = [
     {
+      path: '/dashboard/orders',
       label: 'Orders',
       icon: <ShoppingCart className="w-5 h-5" />,
-      description: 'Manage customer orders'
+      isActive: true,
     },
+  ];
+
+  const comingSoonItems: Array<{ label: string; icon: React.ReactNode; description: string }> = [
+    // Orders moved to active navigation
   ];
   
 
@@ -129,26 +131,28 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
                   </Link>
                 ))}
 
-                {/* Coming Soon Items */}
-                <div className="mt-4 pt-4 border-t border-slate-200">
-                  <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2 px-3 truncate">
-                    Coming Soon
-                  </h4>
-                  {comingSoonItems.map((item, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center gap-3 p-3 rounded-xl text-slate-400 cursor-not-allowed mb-1 min-w-0"
-                    >
-                      <span className="opacity-60 flex-shrink-0">{item.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <span className="font-medium text-sm truncate block">{item.label}</span>
+                {/* Coming Soon Items - Only show if there are items */}
+                {comingSoonItems.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-slate-200">
+                    <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2 px-3 truncate">
+                      Coming Soon
+                    </h4>
+                    {comingSoonItems.map((item, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-3 p-3 rounded-xl text-slate-400 cursor-not-allowed mb-1 min-w-0"
+                      >
+                        <span className="opacity-60 flex-shrink-0">{item.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium text-sm truncate block">{item.label}</span>
+                        </div>
+                        <span className="text-xs bg-gradient-to-r from-amber-400 to-orange-500 text-white px-2 py-1 rounded-full font-medium flex-shrink-0 whitespace-nowrap">
+                          Soon
+                        </span>
                       </div>
-                      <span className="text-xs bg-gradient-to-r from-amber-400 to-orange-500 text-white px-2 py-1 rounded-full font-medium flex-shrink-0 whitespace-nowrap">
-                        Soon
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </nav>
           </div>
