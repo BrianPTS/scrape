@@ -1,0 +1,37 @@
+diff --git a/scraper.js b/scraper.js
+index 0fb74ce..6fd712a 100644
+--- a/scraper.js
++++ b/scraper.js
+@@ -1049,6 +1049,32 @@ async function callTicketmasterAPI(facetHeader, proxyAgent, eventId, event, mapH
+ 
+     console.log(`API requests completed for event ${eventId} in ${Date.now() - startTime}ms`);
+ 
++    // DEBUG: Log offer structure to see if split/quantity data is available
++    const offers = DataFacets?._embedded?.offer || [];
++    if (offers.length > 0) {
++      // Find a resale offer to examine
++      const resaleOffer = offers.find(o => o.inventoryType?.toLowerCase() === 'resale');
++      const primaryOffer = offers.find(o => o.inventoryType?.toLowerCase() !== 'resale');
++
++      console.log(`\n[DEBUG] Event ${eventId} - Offer Structure Analysis:`);
++      console.log(`Total offers: ${offers.length}`);
++
++      if (resaleOffer) {
++        console.log(`\n[DEBUG] RESALE Offer Fields Available:`);
++        console.log(JSON.stringify(resaleOffer, null, 2));
++      }
++
++      if (primaryOffer) {
++        console.log(`\n[DEBUG] PRIMARY Offer Fields Available:`);
++        console.log(JSON.stringify(primaryOffer, null, 2));
++      }
++
++      // Log all unique field names across all offers
++      const allFields = new Set();
++      offers.forEach(o => Object.keys(o).forEach(k => allFields.add(k)));
++      console.log(`\n[DEBUG] All offer field names: ${[...allFields].join(', ')}`);
++    }
++
+     // Handle the case where we have partial data
+     try {
+       const result = AttachRowSection(
