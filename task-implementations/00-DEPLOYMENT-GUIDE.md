@@ -17,6 +17,12 @@
 | TPTS-033 | Always use highest price for multi-offer seats | Ready | 1 hour |
 | TPTS-034 | Investigate resale split type data availability | Test | 1 hour |
 | TPTS-035 | Add security code to Clean Up Stale Inventory | Ready | 0.5 hours |
+| TPTS-036 | Automatiq API client wrapper | Ready | 2 hours |
+| TPTS-037 | Orders page with data table | Ready | 3 hours |
+| TPTS-038 | Orders filters and search | Ready | 2 hours |
+| TPTS-039 | Order confirm/reject actions | Ready | 2 hours |
+| TPTS-040 | Order details modal | Ready | 2 hours |
+| TPTS-041 | Auto-refresh and notifications | Ready | 1 hour |
 
 ---
 
@@ -1091,6 +1097,292 @@ mongosh "your-connection-string" --eval "
   db.events.updateMany({venueCapacity: {\$exists: false}}, {\$set: {venueCapacity: 0, seatsForSale: 0}});
 "
 ```
+
+---
+
+# PART 5: ORDERS DASHBOARD (TPTS-036 to TPTS-041)
+
+## Overview
+
+The Orders Dashboard integrates with the SeatScouts/Automatiq API to provide real-time order management directly from the TMC Portal.
+
+## Prerequisites
+
+You need API credentials from SeatScouts/Automatiq:
+- **API Token**: Your company's API token
+- **Company ID**: Your company ID in the system
+
+Contact SeatScouts/Broker Genius support if you don't have these credentials.
+
+---
+
+## 5.1 Environment Variables Setup
+
+Add these to your `.env.local` file:
+
+```env
+# Automatiq (SeatScouts/Broker Genius) API Credentials
+AUTOMATIQ_API_TOKEN=your_api_token_here
+AUTOMATIQ_COMPANY_ID=your_company_id_here
+```
+
+**IMPORTANT:** Never commit these credentials to version control.
+
+---
+
+## 5.2 Files Created
+
+| File | Purpose |
+|------|---------|
+| `lib/automatiq.ts` | API client wrapper with typed interfaces |
+| `actions/orderActions.ts` | Server-side actions for order operations |
+| `app/api/orders/route.ts` | REST API endpoints for client-side calls |
+| `app/dashboard/orders/page.tsx` | Orders page UI component |
+
+---
+
+## 5.3 API Client (TPTS-036)
+
+**File:** `lib/automatiq.ts`
+
+The API client provides:
+
+### Types
+```typescript
+interface AutomatiqOrder {
+  id: number;
+  order_id: string;
+  status: OrderStatus;
+  marketplace: string;
+  event_name: string;
+  occurs_at: string;
+  order_date: string;
+  section: string;
+  row: string;
+  low_seat: string | number;
+  high_seat: string | number;
+  quantity: number;
+  unit_price: number | string;
+  total: number | string;
+  delivery: string;
+  // ... more fields
+}
+
+type OrderStatus = 'pending' | 'problem' | 'confirmed' | 'confirmed_delay' | 'delivery_problem' | 'delivered';
+```
+
+### Functions
+```typescript
+// Fetch orders with filters
+getOrders(filters: OrderFilters): Promise<OrdersResponse>
+
+// Get single order
+getOrder(orderId: string | number): Promise<AutomatiqOrder>
+
+// Order actions
+confirmOrder(orderId, seatNumbers?): Promise<AutomatiqOrder>
+rejectOrder(orderId): Promise<AutomatiqOrder>
+recheckOrder(orderId): Promise<AutomatiqOrder>
+fulfillOrder(orderId): Promise<AutomatiqOrder>
+
+// Delivery
+deliverOrderWithUrls(orderId, urls): Promise<AutomatiqOrder>
+
+// Proofs
+uploadOrderProofs(orderId, proofs): Promise<AutomatiqOrder>
+getOrderProofs(orderId, marketplace): Promise<ProofsResponse>
+```
+
+---
+
+## 5.4 Server Actions (TPTS-039)
+
+**File:** `actions/orderActions.ts`
+
+Server actions wrap the API client with error handling:
+
+```typescript
+// Check if API is configured
+checkAutomatiqConfig(): Promise<{ configured: boolean; message?: string }>
+
+// Fetch orders
+fetchOrders(filters): Promise<OrderActionResult>
+fetchOrder(orderId): Promise<OrderActionResult>
+
+// Order actions
+confirmOrder(orderId, seatNumbers?): Promise<OrderActionResult>
+rejectOrder(orderId): Promise<OrderActionResult>
+recheckOrder(orderId): Promise<OrderActionResult>
+setOrderAutoFulfill(orderId): Promise<OrderActionResult>
+
+// Stats
+getOrderStats(): Promise<{ stats: OrderStats }>
+```
+
+---
+
+## 5.5 API Routes
+
+**File:** `app/api/orders/route.ts`
+
+### GET /api/orders
+
+Fetch orders with optional filters:
+
+```
+GET /api/orders?status=pending&marketplace=stubhub&limit=25&page=1
+```
+
+Query Parameters:
+- `status` - Filter by status (pending, problem, confirmed, etc.)
+- `marketplace` - Filter by marketplace (stubhub, vividseats, etc.)
+- `event_name` - Search by event name
+- `limit` - Results per page (default: 25)
+- `page` - Page number (default: 1)
+- `stats=true` - Return only stats counts
+
+### POST /api/orders
+
+Perform actions on orders:
+
+```json
+{
+  "action": "confirm",  // confirm, reject, recheck, fulfill
+  "orderId": 12345,
+  "seatNumbers": "1,2,3,4"  // optional, for confirm
+}
+```
+
+---
+
+## 5.6 Orders Page Features (TPTS-037 to TPTS-041)
+
+**File:** `app/dashboard/orders/page.tsx`
+
+### Stats Cards
+- Total Orders count
+- Pending count (yellow)
+- Problems count (red)
+- Confirmed count (blue)
+- Delivered count (green)
+
+### Orders Table
+| Column | Description |
+|--------|-------------|
+| Status | Color-coded badge (Pending, Problem, Confirmed, etc.) |
+| Order ID | Marketplace order ID |
+| Event | Event name and date |
+| Marketplace | StubHub, VividSeats, etc. |
+| Seats | Section, Row, Seat numbers, Quantity |
+| Total | Total price and per-ticket price |
+| Order Date | When order was placed |
+| Actions | View, Confirm, Reject, Recheck, Auto-Fulfill |
+
+### Filters
+- **Search**: Filter by event name
+- **Status**: Dropdown for all statuses
+- **Marketplace**: Dropdown for all marketplaces
+- **Advanced**: Date range filters (expandable)
+
+### Actions
+| Action | Icon | When Shown | API Endpoint |
+|--------|------|------------|--------------|
+| View | Eye | Always | Opens modal |
+| Confirm | Green check | Pending/Problem | PATCH /orders/{id}/confirm |
+| Reject | Red X | Pending/Problem | PATCH /orders/{id}/reject |
+| Recheck | Rotate | Always | GET /orders/{id}/recheck |
+| Auto-Fulfill | Lightning | Pending | PATCH /orders/{id}/fulfill |
+
+### Order Details Modal
+- Status and Marketplace badges
+- Order ID and Sync ID
+- Order date and delivery type
+- Event information (name, date, venue)
+- Ticket details (section, row, seats, quantity)
+- Pricing breakdown
+- Error reason (if any)
+- Internal notes and tags
+- POS IDs
+- Action buttons
+
+### Auto-Refresh
+- Toggle: On/Off
+- Intervals: 30s, 1m, 2m, 5m
+- Last refresh timestamp
+- Manual refresh button
+
+---
+
+## 5.7 Sidebar Navigation Update
+
+**File:** `app/dashboard/layout.tsx`
+
+Orders has been moved from "Coming Soon" to active navigation.
+
+The Orders link is now in the main navigation menu between Proxies and Logout.
+
+---
+
+## 5.8 Testing Checklist
+
+### Configuration
+- [ ] Add AUTOMATIQ_API_TOKEN to .env.local
+- [ ] Add AUTOMATIQ_COMPANY_ID to .env.local
+- [ ] Restart Next.js dev server
+
+### Orders Page
+- [ ] Navigate to /dashboard/orders
+- [ ] Verify stats cards display counts
+- [ ] Verify orders table loads data
+- [ ] Test search by event name
+- [ ] Test status filter
+- [ ] Test marketplace filter
+- [ ] Test pagination
+
+### Actions
+- [ ] Click eye icon - modal opens
+- [ ] Click confirm on pending order
+- [ ] Click reject on pending order
+- [ ] Click recheck on any order
+- [ ] Verify toast notifications appear
+
+### Auto-Refresh
+- [ ] Toggle auto-refresh on/off
+- [ ] Change refresh interval
+- [ ] Verify data updates automatically
+- [ ] Verify last refresh timestamp updates
+
+### Error Handling
+- [ ] Remove API token - verify error message displays
+- [ ] Test with invalid credentials
+
+---
+
+## 5.9 Supported Marketplaces
+
+| Marketplace | API Value |
+|-------------|-----------|
+| AXS | axs |
+| FanXchange | fanxchange |
+| GameTime | gametime |
+| SeatGeek | seatgeek |
+| StubHub | stubhub |
+| Ticket Evolution | ticket_evo |
+| TicketNetwork | ticket_network_mp |
+| Ticketmaster | ticketmaster |
+| TickPick | tickpick |
+| VividSeats | vividseats |
+
+---
+
+## 5.10 API Rate Limits
+
+The Automatiq API has a rate limit of **100 requests per minute** per company_id.
+
+The auto-refresh feature is designed to stay well within this limit:
+- At 30s interval: 2 requests/minute
+- At 1m interval: 1 request/minute
+- At 5m interval: 0.2 requests/minute
 
 ---
 
