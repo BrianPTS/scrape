@@ -92,6 +92,7 @@ const ExportCsvPage: React.FC = () => {
   const [isCleaningStaleInventory, setIsCleaningStaleInventory] = useState(false);
   const [showClearInventoryDialog, setShowClearInventoryDialog] = useState(false);
   const [showStaleCleanupDialog, setShowStaleCleanupDialog] = useState(false);
+  const [staleSecurityCode, setStaleSecurityCode] = useState('');
 
   // Auto-delete state
   const [autoDeleteSettings, setAutoDeleteSettings] = useState<AutoDeleteSettings>({
@@ -360,6 +361,7 @@ const ExportCsvPage: React.FC = () => {
 
   const confirmStaleCleanup = async () => {
     setShowStaleCleanupDialog(false);
+    setStaleSecurityCode('');
 
     setIsCleaningStaleInventory(true);
     setStaleCleanupStatus('Cleaning up stale inventory...');
@@ -391,6 +393,7 @@ const ExportCsvPage: React.FC = () => {
 
   const cancelStaleCleanup = () => {
     setShowStaleCleanupDialog(false);
+    setStaleSecurityCode('');
   };
 
   // Auto-delete functions
@@ -984,11 +987,25 @@ const ExportCsvPage: React.FC = () => {
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
                   Clear Stale Inventory?
                 </h3>
-                <p className="text-sm text-gray-500 mb-6">
+                <p className="text-sm text-gray-500 mb-4">
                   Are you sure you want to cleanup stale inventory?<br/><br/>
                   This will delete consecutive groups for inactive events and orphaned inventory.<br/><br/>
                   <span className="text-yellow-600 font-medium">This action cannot be undone.</span>
                 </p>
+                <div className="mb-4">
+                  <label htmlFor="staleSecurityCode" className="block text-sm font-medium text-gray-700 mb-2">
+                    Enter security code to proceed:
+                  </label>
+                  <input
+                    type="text"
+                    id="staleSecurityCode"
+                    value={staleSecurityCode}
+                    onChange={(e) => setStaleSecurityCode(e.target.value)}
+                    placeholder="Enter 4-digit code"
+                    maxLength={4}
+                    className="w-32 mx-auto px-3 py-2 text-center border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-yellow-500 focus:border-yellow-500 text-lg tracking-widest"
+                  />
+                </div>
                 <div className="flex justify-center space-x-3">
                   <button
                     onClick={cancelStaleCleanup}
@@ -998,7 +1015,12 @@ const ExportCsvPage: React.FC = () => {
                   </button>
                   <button
                     onClick={confirmStaleCleanup}
-                    className="px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                    disabled={staleSecurityCode !== '2026'}
+                    className={`px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 ${
+                      staleSecurityCode === '2026'
+                        ? 'bg-yellow-600 hover:bg-yellow-700'
+                        : 'bg-gray-400 cursor-not-allowed'
+                    }`}
                   >
                     Clear Stale Inventory
                   </button>
