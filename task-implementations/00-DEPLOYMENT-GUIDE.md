@@ -15,6 +15,8 @@
 | TPTS-031 | Auto-cleanup stale inventory | Ready | 2 hours |
 | TPTS-032 | Event Capacity/Seats Available | Ready | 3 hours |
 | TPTS-033 | Always use highest price for multi-offer seats | Ready | 1 hour |
+| TPTS-034 | Investigate resale split type data availability | Test | 1 hour |
+| TPTS-035 | Add security code to Clean Up Stale Inventory | Ready | 0.5 hours |
 
 ---
 
@@ -888,6 +890,62 @@ Also add `allOfferIds` to all data structures that pass through:
 
 ---
 
+## 2.10 TPTS-035: Add Security Code to Clean Up Stale Inventory Button
+
+**Purpose:** Add a 4-digit security code requirement (2026) to the "Clean Up Stale Inventory" button to prevent accidental deletion.
+
+**File:** `app/dashboard/export-csv/page.tsx`
+
+### Changes Made
+
+1. **Added state variable** (line 95):
+```typescript
+const [staleSecurityCode, setStaleSecurityCode] = useState('');
+```
+
+2. **Reset code on confirm** (line 363-364):
+```typescript
+const confirmStaleCleanup = async () => {
+  setShowStaleCleanupDialog(false);
+  setStaleSecurityCode('');  // Reset security code
+  // ... rest of function
+};
+```
+
+3. **Reset code on cancel** (line 393-395):
+```typescript
+const cancelStaleCleanup = () => {
+  setShowStaleCleanupDialog(false);
+  setStaleSecurityCode('');  // Reset security code
+};
+```
+
+4. **Updated dialog** (lines 992-1024):
+- Added label and input field for 4-digit security code
+- Confirm button is disabled until user enters "2026"
+- Button changes from gray to yellow when correct code is entered
+
+### How It Works
+
+1. User clicks "Clean Up Stale Inventory" button
+2. Warning dialog appears with a text input field
+3. User must enter "2026" to enable the confirm button
+4. Confirm button is grayed out and disabled until correct code is entered
+5. Code resets when dialog is closed (cancel or confirm)
+
+### Testing
+
+1. Navigate to Dashboard > Export CSV
+2. Scroll to "Inventory Management" section
+3. Click "Clean Up Stale Inventory" button
+4. Verify confirm button is disabled (gray)
+5. Enter "2026" in the security code field
+6. Verify confirm button becomes enabled (yellow)
+7. Click Cancel - verify code resets
+8. Re-open dialog - verify code field is empty
+
+---
+
 # PART 3: MONGODB MIGRATION SCRIPT
 
 Run this ONCE after deploying both repos:
@@ -1036,5 +1094,5 @@ mongosh "your-connection-string" --eval "
 
 ---
 
-**Last Updated:** January 30, 2026
+**Last Updated:** February 10, 2026
 **Branch:** claude/add-monday-api-token-rk25G
