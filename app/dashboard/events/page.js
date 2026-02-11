@@ -822,12 +822,18 @@ export default function EventsPage() {
           </div>
         ) : (
           <>
-            <EventsTableModern 
-              data={paginatedEvents} 
+            <EventsTableModern
+              data={paginatedEvents}
               toggleScraping={toggleScraping}
               loadingSeatCounts={loadingSeatCounts}
               onDeleteEvent={handleDeleteEvent}
               togglingEvents={togglingEvents}
+              onEventUpdate={(eventId, updates) => {
+                // Update local state immediately for responsive UI
+                setEvents(prev => prev.map(event =>
+                  event._id === eventId ? { ...event, ...updates } : event
+                ));
+              }}
             />
             
             {/* Enhanced Pagination */}

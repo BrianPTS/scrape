@@ -250,3 +250,45 @@ export async function updateAllEvents(status: boolean){
     }
   }
 }
+
+/**
+ * Toggle CSV export settings for an event (includeStandardSeats or includeResaleSeats)
+ * This is a lightweight update that doesn't trigger seat deletion
+ * @param {string} eventId - The ID of the event to update
+ * @param {string} field - Either 'includeStandardSeats' or 'includeResaleSeats'
+ * @param {boolean} value - The new value for the toggle
+ * @returns {Promise<object>} The updated event or an error object
+ */
+export async function toggleCsvExportSetting(eventId: string, field: 'includeStandardSeats' | 'includeResaleSeats', value: boolean) {
+  if (!eventId || typeof eventId !== 'string') {
+    return { error: 'Invalid event ID provided', success: false };
+  }
+
+  if (field !== 'includeStandardSeats' && field !== 'includeResaleSeats') {
+    return { error: 'Invalid field. Must be includeStandardSeats or includeResaleSeats', success: false };
+  }
+
+  await dbConnect();
+  try {
+    const updateData = { [field]: value };
+
+    const updatedEvent = await Event.findByIdAndUpdate(eventId, updateData, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!updatedEvent) {
+      return { error: 'Event not found', success: false };
+    }
+
+    return {
+      success: true,
+      event: JSON.parse(JSON.stringify(updatedEvent)),
+      field,
+      value
+    };
+  } catch (error) {
+    console.error('Error toggling CSV export setting:', error);
+    return { error: (error as Error).message || 'Failed to toggle CSV export setting', success: false };
+  }
+}

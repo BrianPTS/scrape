@@ -1,9 +1,10 @@
 'use client';
 
-import React, { memo, useMemo, useCallback } from 'react';
+import React, { memo, useMemo, useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Eye, Edit, Trash2, Play, Square, Info, AlertCircle, Calendar, MapPin, Users } from 'lucide-react';
+import { toggleCsvExportSetting } from '@/actions/eventActions';
 
 // Dynamic import for heavy DataTable component (bundle-dynamic-imports)
 const DataTable = dynamic(() => import('react-data-table-component'), {
@@ -49,14 +50,38 @@ const STATUS_HEADER = <Header title="Status" description="Current scraping statu
 const EVENT_DETAILS_HEADER = <Header title="Event Details" description="Event name and information" icon={<Calendar size={16} />} />;
 const EVENT_DATE_HEADER = <Header title="Event Date" description="Scheduled event date" icon={<Calendar size={14} />} />;
 
-const EventsTableModern = memo(function EventsTableModern({ 
-  data, 
-  toggleScraping, 
-  seatCounts = {}, 
-  loadingSeatCounts = false, 
-  onDeleteEvent, 
-  togglingEvents = new Set() 
+const EventsTableModern = memo(function EventsTableModern({
+  data,
+  toggleScraping,
+  seatCounts = {},
+  loadingSeatCounts = false,
+  onDeleteEvent,
+  togglingEvents = new Set(),
+  onEventUpdate
 }) {
+  // State to track which toggles are being updated
+  const [togglingCsvSettings, setTogglingCsvSettings] = useState(new Map());
+
+  // Handler for toggling CSV export settings
+  const handleCsvToggle = useCallback(async (eventId, field, currentValue) => {
+    const key = `${eventId}-${field}`;
+    setTogglingCsvSettings(prev => new Map(prev).set(key, true));
+
+    try {
+      const result = await toggleCsvExportSetting(eventId, field, !currentValue);
+      if (result.success && onEventUpdate) {
+        onEventUpdate(eventId, { [field]: !currentValue });
+      }
+    } catch (error) {
+      console.error('Error toggling CSV setting:', error);
+    } finally {
+      setTogglingCsvSettings(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(key);
+        return newMap;
+      });
+    }
+  }, [onEventUpdate]);
   // Create stable utility functions (rerender-memo)
   const formatDate = useCallback((d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—', []);
   const formatTime = useCallback((d) => d ? new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—', []);
@@ -256,6 +281,52 @@ const EventsTableModern = memo(function EventsTableModern({
       }
     },
     {
+      name: <Header title="CSV" description="Standard/Resale toggle for CSV export" />,
+      width: '100px',
+      cell: r => {
+        const includeStandard = r.includeStandardSeats !== false;
+        const includeResale = r.includeResaleSeats !== false;
+        const standardKey = `${r._id}-includeStandardSeats`;
+        const resaleKey = `${r._id}-includeResaleSeats`;
+        const isTogglingStandard = togglingCsvSettings.has(standardKey);
+        const isTogglingResale = togglingCsvSettings.has(resaleKey);
+
+        return (
+          <div className="flex gap-1 justify-center">
+            <button
+              onClick={() => handleCsvToggle(r._id, 'includeStandardSeats', includeStandard)}
+              disabled={isTogglingStandard}
+              className={`px-2 py-1 rounded text-xs font-bold transition-all duration-200 ${
+                isTogglingStandard
+                  ? 'bg-gray-200 text-gray-400 cursor-wait'
+                  : includeStandard
+                    ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-300'
+                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200 border border-gray-300'
+              }`}
+              title={`Standard seats: ${includeStandard ? 'ON' : 'OFF'} (click to toggle)`}
+            >
+              {isTogglingStandard ? '...' : 'S'}
+            </button>
+            <button
+              onClick={() => handleCsvToggle(r._id, 'includeResaleSeats', includeResale)}
+              disabled={isTogglingResale}
+              className={`px-2 py-1 rounded text-xs font-bold transition-all duration-200 ${
+                isTogglingResale
+                  ? 'bg-gray-200 text-gray-400 cursor-wait'
+                  : includeResale
+                    ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 border border-purple-300'
+                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200 border border-gray-300'
+              }`}
+              title={`Resale seats: ${includeResale ? 'ON' : 'OFF'} (click to toggle)`}
+            >
+              {isTogglingResale ? '...' : 'R'}
+            </button>
+          </div>
+        );
+      },
+      ignoreRowClick: true,
+    },
+    {
       name: <Header title="Actions" />, 
       button: true, 
       width: '160px',
@@ -312,7 +383,7 @@ const EventsTableModern = memo(function EventsTableModern({
       ignoreRowClick: true,
       allowOverflow: true,
     }
-  ], [seatCounts, loadingSeatCounts, toggleScraping, onDeleteEvent, formatDate, formatTime, timeAgo, isFresh]);
+  ], [seatCounts, loadingSeatCounts, toggleScraping, onDeleteEvent, formatDate, formatTime, timeAgo, isFresh, handleCsvToggle, togglingCsvSettings]);
 
   // Memoize styles to prevent object recreation
   const styles = useMemo(() => ({
