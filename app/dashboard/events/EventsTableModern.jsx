@@ -4,7 +4,7 @@ import React, { memo, useMemo, useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Eye, Edit, Trash2, Play, Square, Info, AlertCircle, Calendar, MapPin, Users } from 'lucide-react';
-import { toggleCsvExportSetting } from '@/actions/eventActions';
+import { toggleCsvExportSetting, updateMinimumCostSetting } from '@/actions/eventActions';
 
 // Dynamic import for heavy DataTable component (bundle-dynamic-imports)
 const DataTable = dynamic(() => import('react-data-table-component'), {
@@ -82,6 +82,28 @@ const EventsTableModern = memo(function EventsTableModern({
       });
     }
   }, [onEventUpdate]);
+
+  // Handler for toggling minimum cost filter
+  const handleMinCostToggle = useCallback(async (eventId, currentValue) => {
+    const key = `${eventId}-minCost`;
+    setTogglingCsvSettings(prev => new Map(prev).set(key, true));
+
+    try {
+      const result = await updateMinimumCostSetting(eventId, 'enableMinimumCostFilter', !currentValue);
+      if (result.success && onEventUpdate) {
+        onEventUpdate(eventId, { enableMinimumCostFilter: !currentValue });
+      }
+    } catch (error) {
+      console.error('Error toggling minimum cost filter:', error);
+    } finally {
+      setTogglingCsvSettings(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(key);
+        return newMap;
+      });
+    }
+  }, [onEventUpdate]);
+
   // Create stable utility functions (rerender-memo)
   const formatDate = useCallback((d) => d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—', []);
   const formatTime = useCallback((d) => d ? new Date(d).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—', []);
@@ -327,6 +349,46 @@ const EventsTableModern = memo(function EventsTableModern({
       ignoreRowClick: true,
     },
     {
+      name: <Header title="Min $" description="Minimum seat cost filter" />,
+      width: '100px',
+      cell: r => {
+        const minCost = r.minimumSeatCost;
+        const isEnabled = r.enableMinimumCostFilter === true;
+        const minCostKey = `${r._id}-minCost`;
+        const isToggling = togglingCsvSettings.has(minCostKey);
+
+        // If no minimum cost is set, show N/A
+        if (!minCost && minCost !== 0) {
+          return (
+            <div className="text-center text-xs text-slate-400">
+              —
+            </div>
+          );
+        }
+
+        return (
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-xs font-semibold text-slate-700">${minCost}</span>
+            <button
+              onClick={() => handleMinCostToggle(r._id, isEnabled)}
+              disabled={isToggling}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all duration-200 ${
+                isToggling
+                  ? 'bg-gray-200 text-gray-400 cursor-wait'
+                  : isEnabled
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300'
+                    : 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-300'
+              }`}
+              title={`Minimum cost filter: ${isEnabled ? 'ON' : 'OFF'} (click to toggle)`}
+            >
+              {isToggling ? '...' : isEnabled ? 'ON' : 'OFF'}
+            </button>
+          </div>
+        );
+      },
+      ignoreRowClick: true,
+    },
+    {
       name: <Header title="Actions" />, 
       button: true, 
       width: '160px',
@@ -383,7 +445,7 @@ const EventsTableModern = memo(function EventsTableModern({
       ignoreRowClick: true,
       allowOverflow: true,
     }
-  ], [seatCounts, loadingSeatCounts, toggleScraping, onDeleteEvent, formatDate, formatTime, timeAgo, isFresh, handleCsvToggle, togglingCsvSettings]);
+  ], [seatCounts, loadingSeatCounts, toggleScraping, onDeleteEvent, formatDate, formatTime, timeAgo, isFresh, handleCsvToggle, handleMinCostToggle, togglingCsvSettings]);
 
   // Memoize styles to prevent object recreation
   const styles = useMemo(() => ({

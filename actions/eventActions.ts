@@ -292,3 +292,45 @@ export async function toggleCsvExportSetting(eventId: string, field: 'includeSta
     return { error: (error as Error).message || 'Failed to toggle CSV export setting', success: false };
   }
 }
+
+/**
+ * Update minimum cost filter settings for an event
+ * This is a lightweight update that doesn't trigger seat deletion
+ * @param {string} eventId - The ID of the event to update
+ * @param {string} field - Either 'minimumSeatCost' or 'enableMinimumCostFilter'
+ * @param {number|boolean} value - The new value for the field
+ * @returns {Promise<object>} The updated event or an error object
+ */
+export async function updateMinimumCostSetting(eventId: string, field: 'minimumSeatCost' | 'enableMinimumCostFilter', value: number | boolean | null) {
+  if (!eventId || typeof eventId !== 'string') {
+    return { error: 'Invalid event ID provided', success: false };
+  }
+
+  if (field !== 'minimumSeatCost' && field !== 'enableMinimumCostFilter') {
+    return { error: 'Invalid field. Must be minimumSeatCost or enableMinimumCostFilter', success: false };
+  }
+
+  await dbConnect();
+  try {
+    const updateData = { [field]: value };
+
+    const updatedEvent = await Event.findByIdAndUpdate(eventId, updateData, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!updatedEvent) {
+      return { error: 'Event not found', success: false };
+    }
+
+    return {
+      success: true,
+      event: JSON.parse(JSON.stringify(updatedEvent)),
+      field,
+      value
+    };
+  } catch (error) {
+    console.error('Error updating minimum cost setting:', error);
+    return { error: (error as Error).message || 'Failed to update minimum cost setting', success: false };
+  }
+}

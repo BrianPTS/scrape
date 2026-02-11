@@ -34,6 +34,8 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
     Percentage_Increase_ListCost: 0,
     includeStandardSeats: true,
     includeResaleSeats: true,
+    minimumSeatCost: "",
+    enableMinimumCostFilter: false,
   });
 
   // State for additional Ticketmaster URLs
@@ -63,6 +65,8 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
         Percentage_Increase_ListCost: initialData.priceIncreasePercentage || 0,
         includeStandardSeats: initialData.includeStandardSeats !== undefined ? initialData.includeStandardSeats : true,
         includeResaleSeats: initialData.includeResaleSeats !== undefined ? initialData.includeResaleSeats : true,
+        minimumSeatCost: initialData.minimumSeatCost || "",
+        enableMinimumCostFilter: initialData.enableMinimumCostFilter || false,
       });
 
       // Load additional URLs if present
@@ -464,6 +468,8 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
         additionalURLs: additionalURLs,
         includeStandardSeats: formData.includeStandardSeats,
         includeResaleSeats: formData.includeResaleSeats,
+        minimumSeatCost: formData.minimumSeatCost ? parseFloat(formData.minimumSeatCost) : null,
+        enableMinimumCostFilter: formData.enableMinimumCostFilter,
       };
 
       let result;
@@ -1066,6 +1072,72 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
                 </div>
                 <p className="mt-2 text-xs text-gray-500">
                   Toggle which ticket types to include when exporting inventory to CSV
+                </p>
+              </div>
+            </div>
+
+            {/* Minimum Seat Cost Filter */}
+            <div className="md:col-span-2">
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">
+                  Minimum Seat Cost Filter
+                </h3>
+                <div className="flex flex-wrap items-center gap-4">
+                  {/* Minimum Cost Input */}
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="minimumSeatCost" className="text-sm text-gray-600">
+                      Min Cost ($):
+                    </label>
+                    <input
+                      id="minimumSeatCost"
+                      name="minimumSeatCost"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.minimumSeatCost}
+                      onChange={(e) => setFormData(prev => ({ ...prev, minimumSeatCost: e.target.value }))}
+                      placeholder="e.g., 50.00"
+                      className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                      disabled={loading}
+                    />
+                  </div>
+
+                  {/* Enable Filter Toggle */}
+                  <div className="flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, enableMinimumCostFilter: !prev.enableMinimumCostFilter }))}
+                      disabled={!formData.minimumSeatCost || loading}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        !formData.minimumSeatCost
+                          ? 'bg-gray-300 cursor-not-allowed'
+                          : formData.enableMinimumCostFilter
+                            ? 'bg-green-500'
+                            : 'bg-red-400'
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          formData.enableMinimumCostFilter ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                    <span className="ml-3 text-sm font-medium text-gray-700">
+                      Filter Enabled
+                    </span>
+                    <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                      !formData.minimumSeatCost
+                        ? 'bg-gray-100 text-gray-500'
+                        : formData.enableMinimumCostFilter
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                    }`}>
+                      {!formData.minimumSeatCost ? 'N/A' : formData.enableMinimumCostFilter ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Set a minimum seat cost to exclude listings below this price from CSV export. Leave empty to disable cost filtering.
                 </p>
               </div>
             </div>

@@ -423,7 +423,9 @@ export async function generateInventoryCsv(eventUpdateFilterMinutes: number = 0)
           $addFields: {
             event_url: { $arrayElemAt: ['$eventDetails.URL', 0] },
             includeStandardSeats: { $ifNull: [{ $arrayElemAt: ['$eventDetails.includeStandardSeats', 0] }, true] },
-            includeResaleSeats: { $ifNull: [{ $arrayElemAt: ['$eventDetails.includeResaleSeats', 0] }, true] }
+            includeResaleSeats: { $ifNull: [{ $arrayElemAt: ['$eventDetails.includeResaleSeats', 0] }, true] },
+            minimumSeatCost: { $arrayElemAt: ['$eventDetails.minimumSeatCost', 0] },
+            enableMinimumCostFilter: { $ifNull: [{ $arrayElemAt: ['$eventDetails.enableMinimumCostFilter', 0] }, false] }
           }
         },
         { $project: projection },
@@ -539,6 +541,8 @@ interface ConsecutiveGroupDocument {
   event_url?: string; // Ticketmaster URL from Event collection
   includeStandardSeats?: boolean; // Whether to include standard seats in CSV
   includeResaleSeats?: boolean; // Whether to include resale seats in CSV
+  minimumSeatCost?: number | null; // Minimum seat cost threshold for filtering
+  enableMinimumCostFilter?: boolean; // Whether to enable minimum cost filtering
   seats?: Array<{ number: string | number }>;
 }
 
@@ -616,6 +620,18 @@ async function processBatch(batch: ConsecutiveGroupDocument[]): Promise<CsvRow[]
     // Exclude Standard listings with 2 or fewer seats
     if (isStandard && quantity <= 2) {
       return false;
+    }
+
+    // Check minimum cost filter
+    const enableMinCostFilter = doc.enableMinimumCostFilter === true;
+    const minCost = doc.minimumSeatCost;
+    const listingPrice = inventory?.listPrice || 0;
+
+    // If minimum cost filter is enabled and minimum cost is set, filter by price
+    if (enableMinCostFilter && minCost !== null && minCost !== undefined && minCost > 0) {
+      if (listingPrice < minCost) {
+        return false;
+      }
     }
 
     return true;

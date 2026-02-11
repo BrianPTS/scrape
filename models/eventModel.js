@@ -45,6 +45,16 @@ const eventSchema = new mongoose.Schema(
       default: true,
       description: "Include Resale ticket listings in CSV export"
     },
+    minimumSeatCost: {
+      type: Number,
+      default: null,
+      description: "Minimum seat cost threshold for CSV export filtering"
+    },
+    enableMinimumCostFilter: {
+      type: Boolean,
+      default: false,
+      description: "Enable filtering by minimum seat cost in CSV export"
+    },
     Zone: {
       type: String,
       default: "none",
