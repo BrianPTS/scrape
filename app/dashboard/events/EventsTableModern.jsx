@@ -300,8 +300,8 @@ const EventsTableModern = memo(function EventsTableModern({
                 isTogglingStandard
                   ? 'bg-gray-200 text-gray-400 cursor-wait'
                   : includeStandard
-                    ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-300'
-                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200 border border-gray-300'
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300'
+                    : 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-300'
               }`}
               title={`Standard seats: ${includeStandard ? 'ON' : 'OFF'} (click to toggle)`}
             >
@@ -314,8 +314,8 @@ const EventsTableModern = memo(function EventsTableModern({
                 isTogglingResale
                   ? 'bg-gray-200 text-gray-400 cursor-wait'
                   : includeResale
-                    ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 border border-purple-300'
-                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200 border border-gray-300'
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300'
+                    : 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-300'
               }`}
               title={`Resale seats: ${includeResale ? 'ON' : 'OFF'} (click to toggle)`}
             >
