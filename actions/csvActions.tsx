@@ -425,7 +425,13 @@ export async function generateInventoryCsv(eventUpdateFilterMinutes: number = 0)
             includeStandardSeats: { $ifNull: [{ $arrayElemAt: ['$eventDetails.includeStandardSeats', 0] }, true] },
             includeResaleSeats: { $ifNull: [{ $arrayElemAt: ['$eventDetails.includeResaleSeats', 0] }, true] },
             minimumSeatCost: { $arrayElemAt: ['$eventDetails.minimumSeatCost', 0] },
-            enableMinimumCostFilter: { $ifNull: [{ $arrayElemAt: ['$eventDetails.enableMinimumCostFilter', 0] }, false] }
+            enableMinimumCostFilter: { $ifNull: [{ $arrayElemAt: ['$eventDetails.enableMinimumCostFilter', 0] }, false] },
+            // Markup settings
+            priceIncreasePercentage: { $ifNull: [{ $arrayElemAt: ['$eventDetails.priceIncreasePercentage', 0] }, 25] },
+            standardMarkup: { $arrayElemAt: ['$eventDetails.standardMarkup', 0] },
+            resaleMarkup: { $arrayElemAt: ['$eventDetails.resaleMarkup', 0] },
+            highQuantityThreshold: { $ifNull: [{ $arrayElemAt: ['$eventDetails.highQuantityThreshold', 0] }, 8] },
+            highQuantityBonusMarkup: { $ifNull: [{ $arrayElemAt: ['$eventDetails.highQuantityBonusMarkup', 0] }, 0] }
           }
         },
         { $project: projection },
@@ -543,7 +549,51 @@ interface ConsecutiveGroupDocument {
   includeResaleSeats?: boolean; // Whether to include resale seats in CSV
   minimumSeatCost?: number | null; // Minimum seat cost threshold for filtering
   enableMinimumCostFilter?: boolean; // Whether to enable minimum cost filtering
+  // Markup settings
+  priceIncreasePercentage?: number; // Default/fallback markup percentage
+  standardMarkup?: number | null; // Markup % for Standard tickets
+  resaleMarkup?: number | null; // Markup % for Resale tickets
+  highQuantityThreshold?: number; // Seat quantity threshold for bonus markup
+  highQuantityBonusMarkup?: number; // Bonus markup % for high quantity Standard tickets
   seats?: Array<{ number: string | number }>;
+}
+
+// Function to calculate markup percentage based on ticket type and quantity
+function calculateMarkupPercentage(
+  isStandard: boolean,
+  quantity: number,
+  doc: ConsecutiveGroupDocument
+): number {
+  // Get base markup for ticket type
+  const defaultMarkup = doc.priceIncreasePercentage ?? 25;
+  let baseMarkup: number;
+
+  if (isStandard) {
+    // Use standardMarkup if set, otherwise fall back to default
+    baseMarkup = doc.standardMarkup ?? defaultMarkup;
+  } else {
+    // Use resaleMarkup if set, otherwise fall back to default
+    baseMarkup = doc.resaleMarkup ?? defaultMarkup;
+  }
+
+  // Add high quantity bonus for Standard tickets only
+  let bonusMarkup = 0;
+  if (isStandard) {
+    const threshold = doc.highQuantityThreshold ?? 8;
+    if (quantity >= threshold) {
+      bonusMarkup = doc.highQuantityBonusMarkup ?? 0;
+    }
+  }
+
+  return baseMarkup + bonusMarkup;
+}
+
+// Function to apply markup to price
+function applyMarkup(originalPrice: number, markupPercentage: number): number {
+  if (markupPercentage <= 0) {
+    return originalPrice;
+  }
+  return originalPrice * (1 + markupPercentage / 100);
 }
 
 // Function to determine split configuration based on ticket type and quantity
@@ -639,6 +689,8 @@ async function processBatch(batch: ConsecutiveGroupDocument[]): Promise<CsvRow[]
 
   return filteredBatch.map(doc => {
     const inventory = doc.inventory;
+    const quantity = inventory?.quantity || 0;
+    const isStandard = inventory?.splitType === 'NEVERLEAVEONE';
 
     // Pre-compute expensive operations with null safety
     const seatsString = doc.seats && doc.seats.length > 0 ?
@@ -650,7 +702,7 @@ async function processBatch(batch: ConsecutiveGroupDocument[]): Promise<CsvRow[]
 
     // Calculate split configuration based on quantity and split type
     const { finalSplitType, customSplit } = calculateSplitConfiguration(
-      inventory?.quantity || 0,
+      quantity,
       inventory?.splitType
     );
 
@@ -672,21 +724,25 @@ async function processBatch(batch: ConsecutiveGroupDocument[]): Promise<CsvRow[]
       }
     }
 
+    // Calculate markup based on ticket type and quantity
+    const markupPercentage = calculateMarkupPercentage(isStandard, quantity, doc);
+    const listPriceWithMarkup = applyMarkup(inventory?.listPrice || 0, markupPercentage);
+
     return {
       inventory_id: inventory?.inventoryId || 0,
       event_name: doc.event_name || '',
       venue_name: doc.venue_name || '',
       event_date: eventDateString,
       event_id: doc.mapping_id || '',
-      quantity: inventory?.quantity || 0,
+      quantity: quantity,
       section: inventory?.section || '',
       row: inventory?.row || '',
       seats: seatsString,
       barcodes: inventory?.barcodes || '',
       internal_notes: internalNotes,
       public_notes: publicNotes,
-      tags: (inventory?.splitType === 'NEVERLEAVEONE' ? 'STANDARD' : 'RESALE'),
-      list_price: Number(applyPriceIncrease(inventory?.listPrice || 0).toFixed(2)),
+      tags: (isStandard ? 'STANDARD' : 'RESALE'),
+      list_price: Number(listPriceWithMarkup.toFixed(2)),
       face_price: Number((inventory?.cost || 0).toFixed(2)),
       taxed_cost: Number((inventory?.cost || 0).toFixed(2)),
       cost: Number((inventory?.cost || 0).toFixed(2)),

@@ -36,6 +36,10 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
     includeResaleSeats: true,
     minimumSeatCost: "",
     enableMinimumCostFilter: false,
+    standardMarkup: "",
+    resaleMarkup: "",
+    highQuantityThreshold: 8,
+    highQuantityBonusMarkup: "",
   });
 
   // State for additional Ticketmaster URLs
@@ -67,6 +71,10 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
         includeResaleSeats: initialData.includeResaleSeats !== undefined ? initialData.includeResaleSeats : true,
         minimumSeatCost: initialData.minimumSeatCost || "",
         enableMinimumCostFilter: initialData.enableMinimumCostFilter || false,
+        standardMarkup: initialData.standardMarkup ?? "",
+        resaleMarkup: initialData.resaleMarkup ?? "",
+        highQuantityThreshold: initialData.highQuantityThreshold ?? 8,
+        highQuantityBonusMarkup: initialData.highQuantityBonusMarkup ?? "",
       });
 
       // Load additional URLs if present
@@ -470,6 +478,10 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
         includeResaleSeats: formData.includeResaleSeats,
         minimumSeatCost: formData.minimumSeatCost ? parseFloat(formData.minimumSeatCost) : null,
         enableMinimumCostFilter: formData.enableMinimumCostFilter,
+        standardMarkup: formData.standardMarkup !== "" ? parseFloat(formData.standardMarkup) : null,
+        resaleMarkup: formData.resaleMarkup !== "" ? parseFloat(formData.resaleMarkup) : null,
+        highQuantityThreshold: parseInt(formData.highQuantityThreshold) || 8,
+        highQuantityBonusMarkup: formData.highQuantityBonusMarkup !== "" ? parseFloat(formData.highQuantityBonusMarkup) : 0,
       };
 
       let result;
@@ -1139,6 +1151,108 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
                 <p className="mt-2 text-xs text-gray-500">
                   Set a minimum seat cost to exclude listings below this price from CSV export. Leave empty to disable cost filtering.
                 </p>
+              </div>
+            </div>
+
+            {/* Markup Settings */}
+            <div className="md:col-span-2">
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">
+                  Markup Settings
+                </h3>
+
+                {/* Base Markup by Ticket Type */}
+                <div className="mb-4">
+                  <label className="block text-xs font-medium text-gray-600 mb-2">
+                    Base Markup by Ticket Type
+                  </label>
+                  <div className="flex flex-wrap gap-4">
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="standardMarkup" className="text-sm text-gray-600">
+                        Standard:
+                      </label>
+                      <input
+                        id="standardMarkup"
+                        name="standardMarkup"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={formData.standardMarkup}
+                        onChange={(e) => setFormData(prev => ({ ...prev, standardMarkup: e.target.value }))}
+                        placeholder={`${formData.Percentage_Increase_ListCost || 0}`}
+                        className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                        disabled={loading}
+                      />
+                      <span className="text-sm text-gray-500">%</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="resaleMarkup" className="text-sm text-gray-600">
+                        Resale:
+                      </label>
+                      <input
+                        id="resaleMarkup"
+                        name="resaleMarkup"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={formData.resaleMarkup}
+                        onChange={(e) => setFormData(prev => ({ ...prev, resaleMarkup: e.target.value }))}
+                        placeholder={`${formData.Percentage_Increase_ListCost || 0}`}
+                        className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                        disabled={loading}
+                      />
+                      <span className="text-sm text-gray-500">%</span>
+                    </div>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Leave empty to use default markup ({formData.Percentage_Increase_ListCost || 0}%)
+                  </p>
+                </div>
+
+                {/* High Quantity Bonus (Standard Only) */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-2">
+                    High Quantity Bonus (Standard Only)
+                  </label>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="highQuantityThreshold" className="text-sm text-gray-600">
+                        If seats ≥
+                      </label>
+                      <input
+                        id="highQuantityThreshold"
+                        name="highQuantityThreshold"
+                        type="number"
+                        min="1"
+                        value={formData.highQuantityThreshold}
+                        onChange={(e) => setFormData(prev => ({ ...prev, highQuantityThreshold: e.target.value }))}
+                        className="w-16 px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                        disabled={loading}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="highQuantityBonusMarkup" className="text-sm text-gray-600">
+                        Add bonus:
+                      </label>
+                      <input
+                        id="highQuantityBonusMarkup"
+                        name="highQuantityBonusMarkup"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={formData.highQuantityBonusMarkup}
+                        onChange={(e) => setFormData(prev => ({ ...prev, highQuantityBonusMarkup: e.target.value }))}
+                        placeholder="0"
+                        className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                        disabled={loading}
+                      />
+                      <span className="text-sm text-gray-500">%</span>
+                    </div>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Bonus markup added to Standard tickets when quantity meets threshold
+                  </p>
+                </div>
               </div>
             </div>
 

@@ -83,7 +83,27 @@ const eventSchema = new mongoose.Schema(
     },
     priceIncreasePercentage: {
       type: Number,
-      default: 25, // Default 25% markup
+      default: 25, // Default 25% markup (legacy - used as fallback)
+    },
+    standardMarkup: {
+      type: Number,
+      default: null,
+      description: "Markup % for Standard tickets (overrides priceIncreasePercentage)"
+    },
+    resaleMarkup: {
+      type: Number,
+      default: null,
+      description: "Markup % for Resale tickets (overrides priceIncreasePercentage)"
+    },
+    highQuantityThreshold: {
+      type: Number,
+      default: 8,
+      description: "Seat quantity threshold for bonus markup (Standard only)"
+    },
+    highQuantityBonusMarkup: {
+      type: Number,
+      default: 0,
+      description: "Bonus markup % added when seats >= threshold (Standard only)"
     },
     Last_Updated: {
       type: Date,
