@@ -615,6 +615,16 @@ async function processBatch(batch: ConsecutiveGroupDocument[]): Promise<CsvRow[]
       ? (existingPublicNotes ? `${existingPublicNotes} - STANDING ROOM ONLY` : 'STANDING ROOM ONLY')
       : existingPublicNotes;
 
+    // Extract Ticketmaster event ID from URL and create shortened link
+    // URL format: https://www.ticketmaster.com/event/ABC123 -> ticketmaster.com/event/ABC123
+    let internalNotes = '-tnow -tmplus';
+    if (doc.event_url) {
+      const eventIdMatch = doc.event_url.match(/\/event\/([A-Za-z0-9]+)/);
+      if (eventIdMatch && eventIdMatch[1]) {
+        internalNotes = `-tnow -tmplus | ticketmaster.com/event/${eventIdMatch[1]}`;
+      }
+    }
+
     return {
       inventory_id: inventory?.inventoryId || 0,
       event_name: doc.event_name || '',
@@ -626,7 +636,7 @@ async function processBatch(batch: ConsecutiveGroupDocument[]): Promise<CsvRow[]
       row: inventory?.row || '',
       seats: seatsString,
       barcodes: inventory?.barcodes || '',
-      internal_notes: "-tnow -tmplus",
+      internal_notes: internalNotes,
       public_notes: publicNotes,
       tags: (inventory?.splitType === 'NEVERLEAVEONE' ? 'STANDARD' : 'RESALE'),
       list_price: Number(applyPriceIncrease(inventory?.listPrice || 0).toFixed(2)),
