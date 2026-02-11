@@ -35,6 +35,16 @@ const eventSchema = new mongoose.Schema(
         required: true,
       },
     }],
+    includeStandardSeats: {
+      type: Boolean,
+      default: true,
+      description: "Include Standard ticket listings in CSV export"
+    },
+    includeResaleSeats: {
+      type: Boolean,
+      default: true,
+      description: "Include Resale ticket listings in CSV export"
+    },
     Zone: {
       type: String,
       default: "none",

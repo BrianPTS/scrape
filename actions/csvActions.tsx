@@ -418,10 +418,12 @@ export async function generateInventoryCsv(eventUpdateFilterMinutes: number = 0)
             as: 'eventDetails'
           }
         },
-        // Add the event URL field to the document
+        // Add event fields from Event collection
         {
           $addFields: {
-            event_url: { $arrayElemAt: ['$eventDetails.URL', 0] }
+            event_url: { $arrayElemAt: ['$eventDetails.URL', 0] },
+            includeStandardSeats: { $ifNull: [{ $arrayElemAt: ['$eventDetails.includeStandardSeats', 0] }, true] },
+            includeResaleSeats: { $ifNull: [{ $arrayElemAt: ['$eventDetails.includeResaleSeats', 0] }, true] }
           }
         },
         { $project: projection },
@@ -535,6 +537,8 @@ interface ConsecutiveGroupDocument {
   eventId?: string;
   mapping_id?: string;
   event_url?: string; // Ticketmaster URL from Event collection
+  includeStandardSeats?: boolean; // Whether to include standard seats in CSV
+  includeResaleSeats?: boolean; // Whether to include resale seats in CSV
   seats?: Array<{ number: string | number }>;
 }
 
@@ -590,17 +594,30 @@ function calculateSplitConfiguration(quantity: number, splitType?: string): {
 
 // Helper function to process batches in parallel
 async function processBatch(batch: ConsecutiveGroupDocument[]): Promise<CsvRow[]> {
-  // Filter out Standard listings with 2 or fewer seats
-  // Standard tickets are identified by splitType === 'NEVERLEAVEONE'
+  // Filter based on event settings and ticket type rules
   const filteredBatch = batch.filter(doc => {
     const inventory = doc.inventory;
     const isStandard = inventory?.splitType === 'NEVERLEAVEONE';
+    const isResale = !isStandard;
     const quantity = inventory?.quantity || 0;
+
+    // Check event-level toggle settings (default to true if not set)
+    const includeStandard = doc.includeStandardSeats !== false;
+    const includeResale = doc.includeResaleSeats !== false;
+
+    // Exclude based on event toggle settings
+    if (isStandard && !includeStandard) {
+      return false;
+    }
+    if (isResale && !includeResale) {
+      return false;
+    }
 
     // Exclude Standard listings with 2 or fewer seats
     if (isStandard && quantity <= 2) {
       return false;
     }
+
     return true;
   });
 

@@ -32,6 +32,8 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
     inHandDate: "",
     mapping_id: "",
     Percentage_Increase_ListCost: 0,
+    includeStandardSeats: true,
+    includeResaleSeats: true,
   });
 
   // State for additional Ticketmaster URLs
@@ -59,6 +61,8 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
         inHandDate: formatDateForInput(initialData.inHandDate),
         mapping_id: initialData.mapping_id || "",
         Percentage_Increase_ListCost: initialData.priceIncreasePercentage || 0,
+        includeStandardSeats: initialData.includeStandardSeats !== undefined ? initialData.includeStandardSeats : true,
+        includeResaleSeats: initialData.includeResaleSeats !== undefined ? initialData.includeResaleSeats : true,
       });
 
       // Load additional URLs if present
@@ -458,6 +462,8 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
         mapping_id: formData.mapping_id,
         priceIncreasePercentage: formData.Percentage_Increase_ListCost,
         additionalURLs: additionalURLs,
+        includeStandardSeats: formData.includeStandardSeats,
+        includeResaleSeats: formData.includeResaleSeats,
       };
 
       let result;
@@ -997,6 +1003,71 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
               >
                 Initially Paused (Skip Scraping)
               </label>
+            </div>
+
+            {/* CSV Export Toggles - Standard and Resale */}
+            <div className="md:col-span-2">
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">
+                  CSV Export Settings
+                </h3>
+                <div className="flex flex-wrap gap-6">
+                  {/* Include Standard Seats Toggle */}
+                  <div className="flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, includeStandardSeats: !prev.includeStandardSeats }))}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        formData.includeStandardSeats ? 'bg-blue-600' : 'bg-gray-200'
+                      }`}
+                      disabled={loading}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          formData.includeStandardSeats ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                    <span className="ml-3 text-sm font-medium text-gray-700">
+                      Include Standard Seats
+                    </span>
+                    <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                      formData.includeStandardSeats ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {formData.includeStandardSeats ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+
+                  {/* Include Resale Seats Toggle */}
+                  <div className="flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, includeResaleSeats: !prev.includeResaleSeats }))}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        formData.includeResaleSeats ? 'bg-blue-600' : 'bg-gray-200'
+                      }`}
+                      disabled={loading}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          formData.includeResaleSeats ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                    <span className="ml-3 text-sm font-medium text-gray-700">
+                      Include Resale Seats
+                    </span>
+                    <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                      formData.includeResaleSeats ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {formData.includeResaleSeats ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Toggle which ticket types to include when exporting inventory to CSV
+                </p>
+              </div>
             </div>
 
             {/* Event Mapping ID Field */}
