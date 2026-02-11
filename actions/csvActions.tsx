@@ -590,7 +590,21 @@ function calculateSplitConfiguration(quantity: number, splitType?: string): {
 
 // Helper function to process batches in parallel
 async function processBatch(batch: ConsecutiveGroupDocument[]): Promise<CsvRow[]> {
-  return batch.map(doc => {
+  // Filter out Standard listings with 2 or fewer seats
+  // Standard tickets are identified by splitType === 'NEVERLEAVEONE'
+  const filteredBatch = batch.filter(doc => {
+    const inventory = doc.inventory;
+    const isStandard = inventory?.splitType === 'NEVERLEAVEONE';
+    const quantity = inventory?.quantity || 0;
+
+    // Exclude Standard listings with 2 or fewer seats
+    if (isStandard && quantity <= 2) {
+      return false;
+    }
+    return true;
+  });
+
+  return filteredBatch.map(doc => {
     const inventory = doc.inventory;
 
     // Pre-compute expensive operations with null safety
