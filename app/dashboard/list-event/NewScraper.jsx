@@ -14,6 +14,9 @@ import {
   AlertCircle,
   CheckCircle,
   Loader,
+  Plus,
+  Trash2,
+  Link,
 } from "lucide-react";
 
 const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false }) => {
@@ -30,6 +33,10 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
     mapping_id: "",
     Percentage_Increase_ListCost: 0,
   });
+
+  // State for additional Ticketmaster URLs
+  const [additionalURLs, setAdditionalURLs] = useState([]);
+  const [newAdditionalURL, setNewAdditionalURL] = useState({ url: "", label: "" });
 
   // Load initial data for edit mode
   useEffect(() => {
@@ -53,6 +60,11 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
         mapping_id: initialData.mapping_id || "",
         Percentage_Increase_ListCost: initialData.priceIncreasePercentage || 0,
       });
+
+      // Load additional URLs if present
+      if (initialData.additionalURLs && Array.isArray(initialData.additionalURLs)) {
+        setAdditionalURLs(initialData.additionalURLs);
+      }
     }
   }, [isEdit, initialData]);
 
@@ -386,6 +398,35 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
     }));
   };
 
+  // Handler for adding additional Ticketmaster URLs
+  const handleAddAdditionalURL = () => {
+    if (!newAdditionalURL.url || !newAdditionalURL.label) {
+      return;
+    }
+
+    // Validate URL
+    if (!validateUrl(newAdditionalURL.url)) {
+      setError("Please enter a valid Ticketmaster URL");
+      return;
+    }
+
+    // Check for duplicate URLs
+    const isDuplicate = additionalURLs.some(item => item.url === newAdditionalURL.url);
+    if (isDuplicate) {
+      setError("This URL has already been added");
+      return;
+    }
+
+    setAdditionalURLs(prev => [...prev, { ...newAdditionalURL }]);
+    setNewAdditionalURL({ url: "", label: "" });
+    setError("");
+  };
+
+  // Handler for removing additional URL
+  const handleRemoveAdditionalURL = (index) => {
+    setAdditionalURLs(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -416,6 +457,7 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
         inHandDate: formData.inHandDate,
         mapping_id: formData.mapping_id,
         priceIncreasePercentage: formData.Percentage_Increase_ListCost,
+        additionalURLs: additionalURLs,
       };
 
       let result;
@@ -544,6 +586,75 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
                 </p>
               )}
 
+            </div>
+
+            {/* Additional Ticketmaster URLs Section */}
+            <div className="md:col-span-2">
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <div className="flex items-center gap-2 mb-3">
+                  <Link className="h-5 w-5 text-blue-500" />
+                  <h3 className="text-sm font-medium text-gray-700">
+                    Additional Ticketmaster URLs
+                  </h3>
+                  <span className="text-xs text-gray-500">(Optional - for multi-day events)</span>
+                </div>
+
+                {/* List of added additional URLs */}
+                {additionalURLs.length > 0 && (
+                  <div className="mb-4 space-y-2">
+                    {additionalURLs.map((item, index) => (
+                      <div key={index} className="flex items-center gap-2 bg-white p-2 rounded border border-gray-200">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{item.label}</p>
+                          <p className="text-xs text-gray-500 truncate">{item.url}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAdditionalURL(index)}
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                          title="Remove URL"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add new additional URL */}
+                <div className="space-y-2">
+                  <div className="flex flex-col md:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={newAdditionalURL.label}
+                      onChange={(e) => setNewAdditionalURL(prev => ({ ...prev, label: e.target.value }))}
+                      placeholder="Label (e.g., Friday - Beach Grandstands)"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                      disabled={loading}
+                    />
+                    <input
+                      type="url"
+                      value={newAdditionalURL.url}
+                      onChange={(e) => setNewAdditionalURL(prev => ({ ...prev, url: e.target.value }))}
+                      placeholder="Ticketmaster URL"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                      disabled={loading}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddAdditionalURL}
+                      disabled={loading || !newAdditionalURL.url || !newAdditionalURL.label}
+                      className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Add multiple Ticketmaster URLs for events that span multiple days or have different grandstands (e.g., Formula 1 weekends)
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Event ID Field */}

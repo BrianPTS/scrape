@@ -25,6 +25,16 @@ const eventSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    additionalURLs: [{
+      url: {
+        type: String,
+        required: true,
+      },
+      label: {
+        type: String,
+        required: true,
+      },
+    }],
     Zone: {
       type: String,
       default: "none",
