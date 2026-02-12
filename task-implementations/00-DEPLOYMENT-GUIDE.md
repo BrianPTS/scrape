@@ -360,169 +360,103 @@ await Event.updateOne(
 
 # PART 2: SCRAPE REPO CHANGES
 
-## 2.1 TPTS-023: Separate % Increase Fields
+## 2.1 TPTS-023: Separate % Increase Fields (UPDATED)
+
+> **Note:** The original spec was updated to include high quantity bonus and minimum cost filter features (TPTS-048, TPTS-049).
 
 ### File 1: `models/eventModel.js`
 
-**REMOVE:**
+**KEEP existing field (used as fallback):**
 ```javascript
 priceIncreasePercentage: {
   type: Number,
-  default: 35,
+  default: 25, // Default 25% markup (legacy - used as fallback)
 },
 ```
 
-**ADD:**
+**ADD these new fields:**
 ```javascript
-standardPriceIncreasePercentage: {
+// Standard/Resale markup split
+standardMarkup: {
   type: Number,
-  default: 35,
+  default: null,
+  description: "Markup % for Standard tickets (overrides priceIncreasePercentage)"
 },
-resalePriceIncreasePercentage: {
+resaleMarkup: {
   type: Number,
-  default: 35,
+  default: null,
+  description: "Markup % for Resale tickets (overrides priceIncreasePercentage)"
+},
+
+// High quantity bonus (Standard only)
+highQuantityThreshold: {
+  type: Number,
+  default: 8,
+  description: "Seat quantity threshold for bonus markup (Standard only)"
+},
+highQuantityBonusMarkup: {
+  type: Number,
+  default: 0,
+  description: "Bonus markup % added when seats >= threshold (Standard only)"
+},
+
+// Minimum cost filter
+minimumSeatCost: {
+  type: Number,
+  default: null,
+  description: "Minimum seat cost threshold for CSV export filtering"
+},
+enableMinimumCostFilter: {
+  type: Boolean,
+  default: false,
+  description: "Enable filtering by minimum seat cost in CSV export"
 },
 ```
+
+### Markup Logic
+
+| Type | Quantity | Base Markup | Bonus | Total |
+|------|----------|-------------|-------|-------|
+| Standard | 5 seats | 15% | 0% | 15% |
+| Standard | 10 seats | 15% | 10% | 25% |
+| Resale | 5 seats | 10% | 0% | 10% |
+| Resale | 10 seats | 10% | 0% | 10% |
+
+*High quantity bonus only applies to Standard tickets*
 
 ### File 2: `app/dashboard/list-event/NewScraper.jsx`
 
-**In formData state (around line 20-32):**
-
-REPLACE: `Percentage_Increase_ListCost: 0,`
-
-WITH:
+**In formData state, ADD:**
 ```javascript
-Standard_Percentage_Increase: 35,
-Resale_Percentage_Increase: 35,
+standardMarkup: "",
+resaleMarkup: "",
+highQuantityThreshold: 8,
+highQuantityBonusMarkup: "",
+minimumSeatCost: "",
+enableMinimumCostFilter: false,
 ```
 
-**In useEffect for edit mode (around line 35-57):**
-
-REPLACE: `Percentage_Increase_ListCost: initialData.priceIncreasePercentage || 0,`
-
-WITH:
+**In useEffect for edit mode, ADD:**
 ```javascript
-Standard_Percentage_Increase: initialData.standardPriceIncreasePercentage || 35,
-Resale_Percentage_Increase: initialData.resalePriceIncreasePercentage || 35,
+standardMarkup: initialData.standardMarkup ?? "",
+resaleMarkup: initialData.resaleMarkup ?? "",
+highQuantityThreshold: initialData.highQuantityThreshold ?? 8,
+highQuantityBonusMarkup: initialData.highQuantityBonusMarkup ?? "",
+minimumSeatCost: initialData.minimumSeatCost || "",
+enableMinimumCostFilter: initialData.enableMinimumCostFilter || false,
 ```
 
-**In validationState (around line 62-72):**
-
-REPLACE: `Percentage_Increase_ListCost: true,`
-
-WITH:
+**In handleSubmit eventData, ADD:**
 ```javascript
-Standard_Percentage_Increase: true,
-Resale_Percentage_Increase: true,
+standardMarkup: formData.standardMarkup !== "" ? parseFloat(formData.standardMarkup) : null,
+resaleMarkup: formData.resaleMarkup !== "" ? parseFloat(formData.resaleMarkup) : null,
+highQuantityThreshold: parseInt(formData.highQuantityThreshold) || 8,
+highQuantityBonusMarkup: formData.highQuantityBonusMarkup !== "" ? parseFloat(formData.highQuantityBonusMarkup) : 0,
+minimumSeatCost: formData.minimumSeatCost ? parseFloat(formData.minimumSeatCost) : null,
+enableMinimumCostFilter: formData.enableMinimumCostFilter,
 ```
 
-**In touchedFields (around line 73-83):**
-
-REPLACE: `Percentage_Increase_ListCost: false,`
-
-WITH:
-```javascript
-Standard_Percentage_Increase: false,
-Resale_Percentage_Increase: false,
-```
-
-**In validateForm function (around line 271-298):**
-
-REPLACE: `Percentage_Increase_ListCost: formData.Percentage_Increase_ListCost >= 0,`
-
-WITH:
-```javascript
-Standard_Percentage_Increase: formData.Standard_Percentage_Increase >= 0,
-Resale_Percentage_Increase: formData.Resale_Percentage_Increase >= 0,
-```
-
-**In handleSubmit eventData (around line 406-419):**
-
-REPLACE: `priceIncreasePercentage: formData.Percentage_Increase_ListCost,`
-
-WITH:
-```javascript
-standardPriceIncreasePercentage: formData.Standard_Percentage_Increase,
-resalePriceIncreasePercentage: formData.Resale_Percentage_Increase,
-```
-
-**Replace the single percentage input field in JSX with TWO fields:**
-
-```jsx
-{/* Standard Ticket Percentage Increase Field */}
-<div>
-  <label
-    htmlFor="Standard_Percentage_Increase"
-    className="block text-sm font-medium text-gray-700 mb-1"
-  >
-    % Increase - Standard <span className="text-red-500">*</span>
-  </label>
-  <div className="relative">
-    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-      <Tag className="h-5 w-5 text-gray-400" />
-    </div>
-    <input
-      id="Standard_Percentage_Increase"
-      name="Standard_Percentage_Increase"
-      type="number"
-      min="0"
-      step="0.01"
-      value={formData.Standard_Percentage_Increase}
-      onChange={handleInputChange}
-      onBlur={handleBlur}
-      placeholder="e.g., 35"
-      className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${
-        !validationState.Standard_Percentage_Increase && touchedFields.Standard_Percentage_Increase
-          ? "border-red-500 bg-red-50"
-          : validationState.Standard_Percentage_Increase && formData.Standard_Percentage_Increase
-          ? "border-green-500 bg-green-50"
-          : "border-gray-300"
-      }`}
-      disabled={loading}
-    />
-  </div>
-  <p className="mt-1 text-xs text-gray-500">
-    Markup % for standard/list pricing
-  </p>
-</div>
-
-{/* Resale Ticket Percentage Increase Field */}
-<div>
-  <label
-    htmlFor="Resale_Percentage_Increase"
-    className="block text-sm font-medium text-gray-700 mb-1"
-  >
-    % Increase - Resale <span className="text-red-500">*</span>
-  </label>
-  <div className="relative">
-    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-      <Tag className="h-5 w-5 text-gray-400" />
-    </div>
-    <input
-      id="Resale_Percentage_Increase"
-      name="Resale_Percentage_Increase"
-      type="number"
-      min="0"
-      step="0.01"
-      value={formData.Resale_Percentage_Increase}
-      onChange={handleInputChange}
-      onBlur={handleBlur}
-      placeholder="e.g., 35"
-      className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${
-        !validationState.Resale_Percentage_Increase && touchedFields.Resale_Percentage_Increase
-          ? "border-red-500 bg-red-50"
-          : validationState.Resale_Percentage_Increase && formData.Resale_Percentage_Increase
-          ? "border-green-500 bg-green-50"
-          : "border-gray-300"
-      }`}
-      disabled={loading}
-    />
-  </div>
-  <p className="mt-1 text-xs text-gray-500">
-    Markup % for resale pricing
-  </p>
-</div>
-```
+**Add Markup Settings UI section (see commit 0c6f93c for full JSX)**
 
 ### File 3: `actions/csvActions.tsx`
 
@@ -531,38 +465,76 @@ resalePriceIncreasePercentage: formData.Resale_Percentage_Increase,
 {
   $addFields: {
     event_url: { $arrayElemAt: ['$eventDetails.URL', 0] },
-    standardPriceIncreasePercentage: { $arrayElemAt: ['$eventDetails.standardPriceIncreasePercentage', 0] },
-    resalePriceIncreasePercentage: { $arrayElemAt: ['$eventDetails.resalePriceIncreasePercentage', 0] }
+    includeStandardSeats: { $ifNull: [{ $arrayElemAt: ['$eventDetails.includeStandardSeats', 0] }, true] },
+    includeResaleSeats: { $ifNull: [{ $arrayElemAt: ['$eventDetails.includeResaleSeats', 0] }, true] },
+    minimumSeatCost: { $arrayElemAt: ['$eventDetails.minimumSeatCost', 0] },
+    enableMinimumCostFilter: { $ifNull: [{ $arrayElemAt: ['$eventDetails.enableMinimumCostFilter', 0] }, false] },
+    // Markup settings
+    priceIncreasePercentage: { $ifNull: [{ $arrayElemAt: ['$eventDetails.priceIncreasePercentage', 0] }, 25] },
+    standardMarkup: { $arrayElemAt: ['$eventDetails.standardMarkup', 0] },
+    resaleMarkup: { $arrayElemAt: ['$eventDetails.resaleMarkup', 0] },
+    highQuantityThreshold: { $ifNull: [{ $arrayElemAt: ['$eventDetails.highQuantityThreshold', 0] }, 8] },
+    highQuantityBonusMarkup: { $ifNull: [{ $arrayElemAt: ['$eventDetails.highQuantityBonusMarkup', 0] }, 0] }
   }
 }
 ```
 
-**Update ConsecutiveGroupDocument interface:**
+**Add markup calculation function:**
 ```typescript
-interface ConsecutiveGroupDocument {
-  // ... existing fields ...
-  standardPriceIncreasePercentage?: number;
-  resalePriceIncreasePercentage?: number;
+function calculateMarkupPercentage(
+  isStandard: boolean,
+  quantity: number,
+  doc: ConsecutiveGroupDocument
+): number {
+  const defaultMarkup = doc.priceIncreasePercentage ?? 25;
+  let baseMarkup: number;
+
+  if (isStandard) {
+    baseMarkup = doc.standardMarkup ?? defaultMarkup;
+  } else {
+    baseMarkup = doc.resaleMarkup ?? defaultMarkup;
+  }
+
+  // Add high quantity bonus for Standard tickets only
+  let bonusMarkup = 0;
+  if (isStandard) {
+    const threshold = doc.highQuantityThreshold ?? 8;
+    if (quantity >= threshold) {
+      bonusMarkup = doc.highQuantityBonusMarkup ?? 0;
+    }
+  }
+
+  return baseMarkup + bonusMarkup;
 }
 ```
 
-**Update processBatch function price calculation:**
+**Update processBatch to use new markup logic:**
 ```typescript
-// Determine if this is a resale ticket
-const isResale = inventory?.splitType === 'DEFAULT';
-
-// Get the appropriate percentage based on ticket type
-const priceIncreasePercentage = isResale
-  ? (doc.resalePriceIncreasePercentage || 35)
-  : (doc.standardPriceIncreasePercentage || 35);
-
-// Calculate the adjusted price
-const listPrice = inventory?.listPrice || 0;
-const adjustedPrice = listPrice * (1 + priceIncreasePercentage / 100);
+// Calculate markup based on ticket type and quantity
+const markupPercentage = calculateMarkupPercentage(isStandard, quantity, doc);
+const listPriceWithMarkup = applyMarkup(inventory?.listPrice || 0, markupPercentage);
 
 // Use in return object:
-list_price: Number(adjustedPrice.toFixed(2)),
+list_price: Number(listPriceWithMarkup.toFixed(2)),
 ```
+
+**Add minimum cost filter in processBatch:**
+```typescript
+// Check minimum cost filter
+const enableMinCostFilter = doc.enableMinimumCostFilter === true;
+const minCost = doc.minimumSeatCost;
+const listingPrice = inventory?.listPrice || 0;
+
+if (enableMinCostFilter && minCost !== null && minCost !== undefined && minCost > 0) {
+  if (listingPrice < minCost) {
+    return false; // Filter out this listing
+  }
+}
+```
+
+### GitHub Commits
+- `36c70fe` - Add minimum seat cost filter for CSV export per event
+- `0c6f93c` - Add Standard/Resale markup split with high quantity bonus
 
 ---
 
@@ -959,23 +931,27 @@ Run this ONCE after deploying both repos:
 ```javascript
 // Connect to MongoDB and run:
 
-// 1. Migrate priceIncreasePercentage to new fields
-db.events.updateMany(
-  { priceIncreasePercentage: { $exists: true } },
-  [
-    {
-      $set: {
-        standardPriceIncreasePercentage: "$priceIncreasePercentage",
-        resalePriceIncreasePercentage: "$priceIncreasePercentage"
-      }
-    }
-  ]
-);
+// 1. Set defaults for new markup fields (NO migration needed - fields have defaults)
+// priceIncreasePercentage is KEPT as fallback, not removed
+// New fields standardMarkup, resaleMarkup default to null (use fallback)
+// highQuantityThreshold defaults to 8
+// highQuantityBonusMarkup defaults to 0
+// minimumSeatCost defaults to null
+// enableMinimumCostFilter defaults to false
 
-// 2. Remove old field
+// Optional: If you want to explicitly set new fields on existing events:
 db.events.updateMany(
-  { priceIncreasePercentage: { $exists: true } },
-  { $unset: { priceIncreasePercentage: "" } }
+  { standardMarkup: { $exists: false } },
+  {
+    $set: {
+      standardMarkup: null,
+      resaleMarkup: null,
+      highQuantityThreshold: 8,
+      highQuantityBonusMarkup: 0,
+      minimumSeatCost: null,
+      enableMinimumCostFilter: false
+    }
+  }
 );
 
 // 3. Set default venue_type for existing events
@@ -1012,11 +988,18 @@ db.events.findOne({}, {
 
 # PART 4: TESTING CHECKLIST
 
-## TPTS-023: Separate % Fields
-- [ ] Create new event with different standard and resale percentages
-- [ ] Edit existing event and verify both fields save correctly
-- [ ] Generate CSV - verify standard tickets use standard percentage
-- [ ] Generate CSV - verify resale tickets use resale percentage
+## TPTS-023: Markup Settings (Standard/Resale Split + High Quantity Bonus + Min Cost Filter)
+- [ ] Create new event with different standard and resale markup percentages
+- [ ] Edit existing event and verify markup fields save correctly
+- [ ] Set high quantity threshold (e.g., 8) and bonus markup (e.g., 10%)
+- [ ] Generate CSV - verify standard tickets use standardMarkup
+- [ ] Generate CSV - verify resale tickets use resaleMarkup
+- [ ] Generate CSV - verify Standard tickets with 8+ seats get bonus markup added
+- [ ] Generate CSV - verify Resale tickets with 8+ seats do NOT get bonus (Standard only)
+- [ ] Set minimum cost (e.g., $50) and enable filter
+- [ ] Generate CSV - verify listings below $50 are excluded
+- [ ] Disable minimum cost filter - verify all listings are included
+- [ ] Test Events list table - Min $ column shows value and ON/OFF toggle
 
 ## TPTS-024: Notes Field
 - [ ] Create new event with internal notes
