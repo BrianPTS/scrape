@@ -748,12 +748,119 @@ const VENUE_TYPES = [
 
 ## 2.6 TPTS-028: Auto-populate "-game" Tag
 
-See file: `AUTO-POPULATE-game-tag.js` for complete implementation.
+**Purpose:** Automatically add "-game" to the internal_notes field for events that are approaching their event time.
 
-**Summary:**
-- Add `isGameEvent()` helper function to detect sports events
-- Auto-add "-game" to internal_notes when creating sports events
-- Ensure "-game" tag in CSV export for sports events
+### Trigger Conditions (whichever comes first):
+1. Event is within 24 hours of start time, OR
+2. It is 10:00 PM EST the day before the event
+
+### Implementation Files
+
+**File 1: `actions/gameTagActions.ts`**
+
+Contains the core logic:
+- `shouldAddGameTag(eventDateTime)` - Checks if event meets trigger conditions
+- `autoPopulateGameTag()` - Processes all events and adds "-game" tag
+- `previewGameTagEvents()` - Preview which events would be tagged
+
+**File 2: `app/api/game-tag-scheduler/route.ts`**
+
+API route for scheduled job control:
+- `GET /api/game-tag-scheduler` - Get scheduler status
+- `POST /api/game-tag-scheduler` with actions:
+  - `start` - Start the scheduler
+  - `stop` - Stop the scheduler
+  - `run-now` - Run immediately
+  - `preview` - Preview without changes
+  - `update-settings` - Update interval settings
+
+**File 3: `models/gameTagSchedulerModel.ts`**
+
+MongoDB model to persist scheduler settings and stats.
+
+### Trigger Logic
+
+```typescript
+function shouldAddGameTag(eventDateTime: Date): { shouldTag: boolean; triggerReason: string } {
+  const now = new Date();
+  const eventDate = new Date(eventDateTime);
+
+  // Condition 1: Within 24 hours
+  const twentyFourHoursFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const isWithin24Hours = eventDate <= twentyFourHoursFromNow;
+
+  // Condition 2: Past 10 PM EST day before
+  // 10 PM EST = 03:00 UTC on event day
+  const eventDateMidnight = new Date(eventDate);
+  eventDateMidnight.setUTCHours(0, 0, 0, 0);
+  const tenPmEstTrigger = new Date(eventDateMidnight);
+  tenPmEstTrigger.setUTCHours(3, 0, 0, 0);
+  const isPastTenPmEst = now >= tenPmEstTrigger;
+
+  if (isWithin24Hours || isPastTenPmEst) {
+    return { shouldTag: true, triggerReason: '...' };
+  }
+  return { shouldTag: false, triggerReason: 'Not yet within trigger window' };
+}
+```
+
+### Notes Update Logic
+
+```typescript
+// Idempotent - won't add if already present
+if (currentNotes.includes('-game')) {
+  continue; // Skip - already tagged
+}
+
+// Append to existing notes
+const newNotes = currentNotes.trim()
+  ? `${currentNotes.trim()} -game`
+  : '-game';
+```
+
+### Scheduler Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| isEnabled | false | Whether scheduler is running |
+| checkIntervalMinutes | 15 | How often to check events |
+| lastRunAt | null | Last execution time |
+| nextRunAt | null | Next scheduled execution |
+
+### API Usage Examples
+
+```bash
+# Start scheduler with 15-minute interval
+curl -X POST /api/game-tag-scheduler \
+  -H "Content-Type: application/json" \
+  -d '{"action": "start", "checkIntervalMinutes": 15}'
+
+# Preview which events would be tagged
+curl -X POST /api/game-tag-scheduler \
+  -H "Content-Type: application/json" \
+  -d '{"action": "preview"}'
+
+# Run immediately (manual trigger)
+curl -X POST /api/game-tag-scheduler \
+  -H "Content-Type: application/json" \
+  -d '{"action": "run-now"}'
+
+# Stop scheduler
+curl -X POST /api/game-tag-scheduler \
+  -H "Content-Type: application/json" \
+  -d '{"action": "stop"}'
+```
+
+### Testing Checklist
+
+- [ ] Start scheduler via API
+- [ ] Verify scheduler status shows isRunning: true
+- [ ] Create event happening in < 24 hours
+- [ ] Wait for scheduler run (or use run-now)
+- [ ] Verify "-game" was added to internal_notes
+- [ ] Verify events already tagged are skipped
+- [ ] Verify past events are not processed
+- [ ] Test preview endpoint shows correct events
 
 ---
 

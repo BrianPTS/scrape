@@ -334,3 +334,4 @@ export async function updateMinimumCostSetting(eventId: string, field: 'minimumS
     return { error: (error as Error).message || 'Failed to update minimum cost setting', success: false };
   }
 }
+

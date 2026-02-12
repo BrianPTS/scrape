@@ -61,55 +61,23 @@ export async function updateGameTagSettings(updates: {
 
 /**
  * Check if an event should have "-game" tag added
- * Triggers at 10 PM EST the day before the event
+ *
+ * TPTS-028: Trigger conditions (whichever comes first):
+ * 1. Event is within 24 hours of start time, OR
+ * 2. It is 10:00 PM EST the day before the event
+ *
+ * @param eventDateTime - The event's date/time
+ * @returns Object with shouldTag boolean and triggerReason string
  */
-function shouldAddGameTag(eventDateTime: Date): boolean {
-  const now = new Date();
-
-  // Convert event time to EST
-  const eventDate = new Date(eventDateTime);
-
-  // Get 10 PM EST the day before the event
-  // Create a date for the day before at 10 PM EST
-  const dayBefore = new Date(eventDate);
-  dayBefore.setDate(dayBefore.getDate() - 1);
-
-  // Set to 10 PM EST (22:00)
-  // EST is UTC-5, so 10 PM EST = 3 AM UTC next day (or 22:00 - 5 = 03:00 UTC)
-  // But we need to handle this properly
-
-  // Get the event date in EST timezone
-  const estOffset = -5 * 60; // EST is UTC-5 (in minutes)
-  const utcTime = dayBefore.getTime() + (dayBefore.getTimezoneOffset() * 60000);
-  const estTime = new Date(utcTime + (estOffset * 60000));
-
-  // Set to 10 PM (22:00) in EST
-  estTime.setHours(22, 0, 0, 0);
-
-  // Convert back to UTC for comparison
-  const tenPmEstInUtc = new Date(estTime.getTime() - (estOffset * 60000) + (estTime.getTimezoneOffset() * 60000));
-
-  // Simpler approach: Calculate 10 PM EST the day before
-  // 10 PM EST = 03:00 UTC the next day (during standard time)
-  // or 02:00 UTC the next day (during daylight saving)
-
-  // Let's use a simpler calculation:
-  // Get the event date, subtract 1 day, set to 22:00, then adjust for EST
-  const triggerTime = new Date(eventDate);
-  triggerTime.setDate(triggerTime.getDate() - 1);
-  triggerTime.setUTCHours(22 + 5, 0, 0, 0); // 10 PM EST = 03:00 UTC (next day technically)
-
-  // Check if current time is past the trigger time
-  return now >= triggerTime;
-}
-
-/**
- * Alternative simpler approach using moment-timezone equivalent logic
- */
-function shouldAddGameTagSimple(eventDateTime: Date): boolean {
+function shouldAddGameTag(eventDateTime: Date): { shouldTag: boolean; triggerReason: string } {
   const now = new Date();
   const eventDate = new Date(eventDateTime);
 
+  // Condition 1: Check if event is within 24 hours
+  const twentyFourHoursFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const isWithin24Hours = eventDate <= twentyFourHoursFromNow;
+
+  // Condition 2: Check if it's past 10 PM EST the day before
   // Calculate 10 PM EST the day before the event
   // EST offset is -5 hours from UTC (ignoring DST for simplicity)
   // 10 PM EST = 10 PM + 5 hours = 3 AM UTC (next day)
@@ -118,15 +86,30 @@ function shouldAddGameTagSimple(eventDateTime: Date): boolean {
   const eventDateMidnight = new Date(eventDate);
   eventDateMidnight.setUTCHours(0, 0, 0, 0);
 
-  // Go back one day and set to 10 PM EST (which is 3 AM UTC)
-  // Actually: day before at 10 PM EST
-  // If event is Jan 15, we want Jan 14 at 10 PM EST
-  // Jan 14 10 PM EST = Jan 15 03:00 UTC
+  // 10 PM EST day before = 03:00 UTC on event day
+  const tenPmEstTrigger = new Date(eventDateMidnight);
+  tenPmEstTrigger.setUTCHours(3, 0, 0, 0); // 10 PM EST = 03:00 UTC
 
-  const triggerTime = new Date(eventDateMidnight);
-  triggerTime.setUTCHours(3, 0, 0, 0); // 10 PM EST = 03:00 UTC
+  const isPastTenPmEst = now >= tenPmEstTrigger;
 
-  return now >= triggerTime;
+  // Determine trigger reason
+  if (isWithin24Hours && isPastTenPmEst) {
+    return { shouldTag: true, triggerReason: 'Within 24 hours AND past 10 PM EST day before' };
+  } else if (isWithin24Hours) {
+    return { shouldTag: true, triggerReason: 'Within 24 hours of event' };
+  } else if (isPastTenPmEst) {
+    return { shouldTag: true, triggerReason: 'Past 10 PM EST day before event' };
+  }
+
+  return { shouldTag: false, triggerReason: 'Not yet within trigger window' };
+}
+
+/**
+ * Simpler check function that just returns boolean
+ * Used for backward compatibility
+ */
+function shouldAddGameTagSimple(eventDateTime: Date): boolean {
+  return shouldAddGameTag(eventDateTime).shouldTag;
 }
 
 /**
@@ -211,38 +194,64 @@ export async function previewGameTagEvents() {
     const events = await Event.find({
       Skip_Scraping: { $ne: true },
       Event_DateTime: { $gte: new Date() }
-    }).select('Event_Name Event_DateTime Venue internal_notes');
+    }).select('Event_Name Event_DateTime Venue internal_notes Event_ID');
 
-    const wouldBeTagged = [];
-    const alreadyTagged = [];
-    const notYetReady = [];
+    const wouldBeTagged: Array<{
+      eventId: string;
+      name: string;
+      dateTime: Date;
+      venue: string;
+      currentNotes: string;
+      triggerReason: string;
+    }> = [];
+    const alreadyTagged: Array<{
+      eventId: string;
+      name: string;
+      dateTime: Date;
+      venue: string;
+    }> = [];
+    const notYetReady: Array<{
+      eventId: string;
+      name: string;
+      dateTime: Date;
+      venue: string;
+    }> = [];
 
     for (const event of events) {
       const currentNotes = event.internal_notes || '';
 
       if (currentNotes.includes('-game')) {
         alreadyTagged.push({
-          name: event.Event_Name,
-          dateTime: event.Event_DateTime,
-          venue: event.Venue
-        });
-      } else if (shouldAddGameTagSimple(event.Event_DateTime)) {
-        wouldBeTagged.push({
+          eventId: event.Event_ID,
           name: event.Event_Name,
           dateTime: event.Event_DateTime,
           venue: event.Venue
         });
       } else {
-        notYetReady.push({
-          name: event.Event_Name,
-          dateTime: event.Event_DateTime,
-          venue: event.Venue
-        });
+        const { shouldTag, triggerReason } = shouldAddGameTag(event.Event_DateTime);
+        if (shouldTag) {
+          wouldBeTagged.push({
+            eventId: event.Event_ID,
+            name: event.Event_Name,
+            dateTime: event.Event_DateTime,
+            venue: event.Venue,
+            currentNotes,
+            triggerReason
+          });
+        } else {
+          notYetReady.push({
+            eventId: event.Event_ID,
+            name: event.Event_Name,
+            dateTime: event.Event_DateTime,
+            venue: event.Venue
+          });
+        }
       }
     }
 
     return {
       success: true,
+      timestamp: new Date().toISOString(),
       summary: {
         total: events.length,
         wouldBeTagged: wouldBeTagged.length,
@@ -250,7 +259,8 @@ export async function previewGameTagEvents() {
         notYetReady: notYetReady.length
       },
       wouldBeTagged,
-      alreadyTagged
+      alreadyTagged,
+      notYetReady
     };
 
   } catch (error) {
