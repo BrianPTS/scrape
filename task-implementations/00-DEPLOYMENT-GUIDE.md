@@ -15,7 +15,7 @@
 | TPTS-031 | Auto-cleanup stale inventory | Ready | 2 hours |
 | TPTS-032 | Event Capacity/Seats Available | Ready | 3 hours |
 | TPTS-033 | Always use highest price for multi-offer seats | Ready | 1 hour |
-| TPTS-034 | Investigate resale split type data availability | Test | 1 hour |
+| TPTS-034 | Investigate resale split type data availability | Complete | 1 hour |
 | TPTS-035 | Add security code to Clean Up Stale Inventory | Ready | 0.5 hours |
 | TPTS-036 | Automatiq API client wrapper | Ready | 2 hours |
 | TPTS-037 | Orders page with data table | Ready | 3 hours |
@@ -23,6 +23,12 @@
 | TPTS-039 | Order confirm/reject actions | Ready | 2 hours |
 | TPTS-040 | Order details modal | Ready | 2 hours |
 | TPTS-041 | Auto-refresh and notifications | Ready | 1 hour |
+| TPTS-042 | Add Ticketmaster URL to CSV internal_notes | Ready | 0.5 hours |
+| TPTS-043 | Multiple Ticketmaster URLs per event | Ready | 2 hours |
+| TPTS-044 | Exclude Standard listings with ≤2 seats | Ready | 0.5 hours |
+| TPTS-047 | Standard/Resale CSV export toggles | Ready | 1 hour |
+| TPTS-048 | Minimum seat cost filter for CSV | Ready | 1 hour |
+| TPTS-049 | High quantity bonus markup (Standard only) | Ready | 1.5 hours |
 
 ---
 
@@ -924,6 +930,678 @@ const cancelStaleCleanup = () => {
 
 ---
 
+## 2.11 TPTS-034: Investigate Resale Split Type Data Availability
+
+**Status:** Complete (Investigation)
+
+**Findings:** The Ticketmaster API provides a `listingType` field that indicates whether a listing is "Standard" or "Resale". This data is already being captured and stored in the `ConsecutiveGroup` model.
+
+**Data Location:**
+- Field: `listingAttributesV2.listingType` in Ticketmaster API response
+- Values: `"Standard"` or `"Resale"`
+- Stored in: `ConsecutiveGroup.inventory.listingType`
+
+**Usage:** This field is used by TPTS-044 and TPTS-047 to filter CSV exports by ticket type.
+
+---
+
+## 2.12 TPTS-042: Add Ticketmaster URL to CSV internal_notes
+
+**Purpose:** Include the event's Ticketmaster URL in the CSV export's internal_notes field for reference.
+
+### File: `actions/csvActions.tsx`
+
+**Aggregation $addFields already includes:**
+```javascript
+event_url: { $arrayElemAt: ['$eventDetails.URL', 0] },
+```
+
+**Update processBatch internal_notes to include URL:**
+```typescript
+// Build internal_notes: base tags + event-specific notes + URL
+const baseNotes = "-tnow -tmplus";
+const eventNotes = doc.event_internal_notes?.trim() || '';
+const eventUrl = doc.event_url || '';
+
+// Combine all notes
+let internalNotes = baseNotes;
+if (eventNotes) {
+  internalNotes += ` ${eventNotes}`;
+}
+if (eventUrl) {
+  internalNotes += ` ${eventUrl}`;
+}
+
+// Use in return object:
+internal_notes: internalNotes,
+```
+
+### CSV Output Example
+```
+internal_notes: "-tnow -tmplus Lakers Game https://www.ticketmaster.com/event/123456"
+```
+
+### GitHub Commit
+- Part of CSV export enhancements
+
+---
+
+## 2.13 TPTS-043: Multiple Ticketmaster URLs per Event
+
+**Purpose:** Support events that have multiple Ticketmaster listing pages (e.g., general admission + accessible seating).
+
+### File 1: `models/eventModel.js`
+
+**ADD this field (after URL):**
+```javascript
+additionalURLs: [{
+  url: {
+    type: String,
+    required: true,
+  },
+  label: {
+    type: String,
+    required: true,
+  },
+}],
+```
+
+### File 2: `app/dashboard/list-event/NewScraper.jsx`
+
+**In formData state, ADD:**
+```javascript
+additionalURLs: [],
+```
+
+**In useEffect for edit mode, ADD:**
+```javascript
+additionalURLs: initialData.additionalURLs || [],
+```
+
+**In handleSubmit eventData, ADD:**
+```javascript
+additionalURLs: formData.additionalURLs,
+```
+
+**Add Additional URLs UI section:**
+```jsx
+{/* Additional URLs */}
+<div className="md:col-span-2">
+  <label className="block text-sm font-medium text-gray-700 mb-1">
+    Additional Ticketmaster URLs
+  </label>
+  {formData.additionalURLs.map((urlObj, index) => (
+    <div key={index} className="flex gap-2 mb-2">
+      <input
+        type="text"
+        placeholder="Label (e.g., 'Accessible')"
+        value={urlObj.label}
+        onChange={(e) => handleAdditionalUrlChange(index, 'label', e.target.value)}
+        className="w-1/3 px-3 py-2 border border-gray-300 rounded-lg"
+      />
+      <input
+        type="url"
+        placeholder="https://www.ticketmaster.com/..."
+        value={urlObj.url}
+        onChange={(e) => handleAdditionalUrlChange(index, 'url', e.target.value)}
+        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
+      />
+      <button
+        type="button"
+        onClick={() => removeAdditionalUrl(index)}
+        className="px-3 py-2 text-red-500 hover:bg-red-50 rounded-lg"
+      >
+        <Trash2 className="h-5 w-5" />
+      </button>
+    </div>
+  ))}
+  <button
+    type="button"
+    onClick={addAdditionalUrl}
+    className="mt-2 px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-2"
+  >
+    <Plus className="h-4 w-4" />
+    Add URL
+  </button>
+</div>
+```
+
+**Add handler functions:**
+```javascript
+const addAdditionalUrl = () => {
+  setFormData(prev => ({
+    ...prev,
+    additionalURLs: [...prev.additionalURLs, { label: '', url: '' }]
+  }));
+};
+
+const removeAdditionalUrl = (index) => {
+  setFormData(prev => ({
+    ...prev,
+    additionalURLs: prev.additionalURLs.filter((_, i) => i !== index)
+  }));
+};
+
+const handleAdditionalUrlChange = (index, field, value) => {
+  setFormData(prev => ({
+    ...prev,
+    additionalURLs: prev.additionalURLs.map((urlObj, i) =>
+      i === index ? { ...urlObj, [field]: value } : urlObj
+    )
+  }));
+};
+```
+
+### Usage Notes
+- Primary URL is still used for scraping
+- Additional URLs are informational/for manual reference
+- Can be extended to support multi-URL scraping in the future
+
+---
+
+## 2.14 TPTS-044: Exclude Standard Listings with ≤2 Seats from CSV
+
+**Purpose:** Filter out Standard ticket listings with 2 or fewer consecutive seats from CSV export, as these small groups are typically less desirable.
+
+### File: `actions/csvActions.tsx`
+
+**In processBatch function, ADD this filter:**
+```typescript
+// Exclude Standard listings with 2 or fewer seats
+const listingType = doc.inventory?.listingType || 'Standard';
+const isStandard = listingType === 'Standard';
+const quantity = doc.seats?.length || 0;
+
+if (isStandard && quantity <= 2) {
+  return false; // Filter out this listing
+}
+```
+
+**Filter Logic:**
+| Listing Type | Quantity | Included in CSV |
+|--------------|----------|-----------------|
+| Standard | 1 | ❌ No |
+| Standard | 2 | ❌ No |
+| Standard | 3+ | ✅ Yes |
+| Resale | 1 | ✅ Yes |
+| Resale | 2 | ✅ Yes |
+| Resale | Any | ✅ Yes |
+
+### Rationale
+- Small Standard listings often represent unsold venue inventory
+- Buyers generally prefer larger seat groups
+- Resale listings are included regardless of quantity (seller inventory varies)
+
+---
+
+## 2.15 TPTS-047: Standard/Resale CSV Export Toggles
+
+**Purpose:** Allow per-event control over whether Standard and/or Resale tickets are included in CSV exports.
+
+### File 1: `models/eventModel.js`
+
+**ADD these fields:**
+```javascript
+includeStandardSeats: {
+  type: Boolean,
+  default: true,
+  description: "Include Standard ticket listings in CSV export"
+},
+includeResaleSeats: {
+  type: Boolean,
+  default: true,
+  description: "Include Resale ticket listings in CSV export"
+},
+```
+
+### File 2: `actions/eventActions.ts`
+
+**ADD this server action:**
+```typescript
+/**
+ * Toggle CSV export settings for an event (includeStandardSeats or includeResaleSeats)
+ * This is a lightweight update that doesn't trigger seat deletion
+ */
+export async function toggleCsvExportSetting(
+  eventId: string,
+  field: 'includeStandardSeats' | 'includeResaleSeats',
+  value: boolean
+) {
+  if (!eventId || typeof eventId !== 'string') {
+    return { error: 'Invalid event ID provided', success: false };
+  }
+
+  if (field !== 'includeStandardSeats' && field !== 'includeResaleSeats') {
+    return { error: 'Invalid field', success: false };
+  }
+
+  await dbConnect();
+  try {
+    const updateData = { [field]: value };
+
+    const updatedEvent = await Event.findByIdAndUpdate(eventId, updateData, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!updatedEvent) {
+      return { error: 'Event not found', success: false };
+    }
+
+    return {
+      success: true,
+      event: JSON.parse(JSON.stringify(updatedEvent)),
+      field,
+      value
+    };
+  } catch (error) {
+    console.error('Error toggling CSV export setting:', error);
+    return { error: (error as Error).message, success: false };
+  }
+}
+```
+
+### File 3: `app/dashboard/events/EventsTableModern.jsx`
+
+**Add S/R toggle columns to the Events list table:**
+
+```jsx
+{/* Standard Toggle Column */}
+<td className="px-2 py-3 whitespace-nowrap text-center">
+  <button
+    onClick={() => handleToggleCsvExport(event._id, 'includeStandardSeats', !event.includeStandardSeats)}
+    className={`px-2 py-1 text-xs font-bold rounded ${
+      event.includeStandardSeats !== false
+        ? 'bg-green-100 text-green-800 hover:bg-green-200'
+        : 'bg-red-100 text-red-800 hover:bg-red-200'
+    }`}
+    title={event.includeStandardSeats !== false ? 'Standard: ON' : 'Standard: OFF'}
+  >
+    S
+  </button>
+</td>
+
+{/* Resale Toggle Column */}
+<td className="px-2 py-3 whitespace-nowrap text-center">
+  <button
+    onClick={() => handleToggleCsvExport(event._id, 'includeResaleSeats', !event.includeResaleSeats)}
+    className={`px-2 py-1 text-xs font-bold rounded ${
+      event.includeResaleSeats !== false
+        ? 'bg-green-100 text-green-800 hover:bg-green-200'
+        : 'bg-red-100 text-red-800 hover:bg-red-200'
+    }`}
+    title={event.includeResaleSeats !== false ? 'Resale: ON' : 'Resale: OFF'}
+  >
+    R
+  </button>
+</td>
+```
+
+### File 4: `actions/csvActions.tsx`
+
+**Update aggregation $addFields:**
+```javascript
+includeStandardSeats: { $ifNull: [{ $arrayElemAt: ['$eventDetails.includeStandardSeats', 0] }, true] },
+includeResaleSeats: { $ifNull: [{ $arrayElemAt: ['$eventDetails.includeResaleSeats', 0] }, true] },
+```
+
+**Add filter in processBatch:**
+```typescript
+// Check Standard/Resale inclusion settings
+const listingType = doc.inventory?.listingType || 'Standard';
+const isStandard = listingType === 'Standard';
+const includeStandard = doc.includeStandardSeats !== false;
+const includeResale = doc.includeResaleSeats !== false;
+
+if (isStandard && !includeStandard) {
+  return false; // Exclude Standard tickets
+}
+if (!isStandard && !includeResale) {
+  return false; // Exclude Resale tickets
+}
+```
+
+### UI Appearance in Events Table
+| S Button | R Button | Meaning |
+|----------|----------|---------|
+| Green "S" | Green "R" | Both types included (default) |
+| Red "S" | Green "R" | Standard excluded, Resale included |
+| Green "S" | Red "R" | Standard included, Resale excluded |
+| Red "S" | Red "R" | Both excluded (no CSV output) |
+
+### GitHub Commits
+- `d8dd424` - Add Standard/Resale quick toggles to Events list table
+- `bae2d44` - Add Standard/Resale seat toggles for CSV export per event
+
+---
+
+## 2.16 TPTS-048: Minimum Seat Cost Filter for CSV Export
+
+**Purpose:** Allow per-event filtering of CSV exports to exclude listings below a minimum cost threshold.
+
+### File 1: `models/eventModel.js`
+
+**ADD these fields:**
+```javascript
+minimumSeatCost: {
+  type: Number,
+  default: null,
+  description: "Minimum seat cost threshold for CSV export filtering"
+},
+enableMinimumCostFilter: {
+  type: Boolean,
+  default: false,
+  description: "Enable filtering by minimum seat cost in CSV export"
+},
+```
+
+### File 2: `actions/eventActions.ts`
+
+**ADD this server action:**
+```typescript
+/**
+ * Update minimum cost filter settings for an event
+ * This is a lightweight update that doesn't trigger seat deletion
+ */
+export async function updateMinimumCostSetting(
+  eventId: string,
+  field: 'minimumSeatCost' | 'enableMinimumCostFilter',
+  value: number | boolean | null
+) {
+  if (!eventId || typeof eventId !== 'string') {
+    return { error: 'Invalid event ID provided', success: false };
+  }
+
+  if (field !== 'minimumSeatCost' && field !== 'enableMinimumCostFilter') {
+    return { error: 'Invalid field', success: false };
+  }
+
+  await dbConnect();
+  try {
+    const updateData = { [field]: value };
+
+    const updatedEvent = await Event.findByIdAndUpdate(eventId, updateData, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!updatedEvent) {
+      return { error: 'Event not found', success: false };
+    }
+
+    return {
+      success: true,
+      event: JSON.parse(JSON.stringify(updatedEvent)),
+      field,
+      value
+    };
+  } catch (error) {
+    console.error('Error updating minimum cost setting:', error);
+    return { error: (error as Error).message, success: false };
+  }
+}
+```
+
+### File 3: `app/dashboard/list-event/NewScraper.jsx`
+
+**In formData state, ADD:**
+```javascript
+minimumSeatCost: "",
+enableMinimumCostFilter: false,
+```
+
+**Add UI section:**
+```jsx
+{/* Minimum Cost Filter */}
+<div className="flex items-end gap-4">
+  <div className="flex-1">
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      Minimum Seat Cost
+    </label>
+    <div className="relative">
+      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span>
+      <input
+        type="number"
+        name="minimumSeatCost"
+        value={formData.minimumSeatCost}
+        onChange={handleInputChange}
+        placeholder="0.00"
+        min="0"
+        step="0.01"
+        className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg"
+      />
+    </div>
+  </div>
+  <div className="flex items-center gap-2 pb-2">
+    <input
+      type="checkbox"
+      id="enableMinimumCostFilter"
+      name="enableMinimumCostFilter"
+      checked={formData.enableMinimumCostFilter}
+      onChange={(e) => handleInputChange({ target: { name: 'enableMinimumCostFilter', value: e.target.checked } })}
+      className="h-4 w-4 text-blue-600 rounded"
+    />
+    <label htmlFor="enableMinimumCostFilter" className="text-sm text-gray-700">
+      Enable filter
+    </label>
+  </div>
+</div>
+```
+
+### File 4: `app/dashboard/events/EventsTableModern.jsx`
+
+**Add Min $ column to Events table:**
+```jsx
+{/* Min $ Column Header */}
+<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+  Min $
+</th>
+
+{/* Min $ Column Cell */}
+<td className="px-4 py-3 whitespace-nowrap">
+  <div className="flex items-center gap-2">
+    <span className="text-sm text-gray-900">
+      {event.minimumSeatCost ? `$${event.minimumSeatCost}` : '-'}
+    </span>
+    <button
+      onClick={() => handleToggleMinCostFilter(event._id, !event.enableMinimumCostFilter)}
+      className={`px-2 py-1 text-xs font-bold rounded ${
+        event.enableMinimumCostFilter
+          ? 'bg-green-100 text-green-800'
+          : 'bg-red-100 text-red-800'
+      }`}
+    >
+      {event.enableMinimumCostFilter ? 'ON' : 'OFF'}
+    </button>
+  </div>
+</td>
+```
+
+### File 5: `actions/csvActions.tsx`
+
+**Update aggregation $addFields:**
+```javascript
+minimumSeatCost: { $arrayElemAt: ['$eventDetails.minimumSeatCost', 0] },
+enableMinimumCostFilter: { $ifNull: [{ $arrayElemAt: ['$eventDetails.enableMinimumCostFilter', 0] }, false] },
+```
+
+**Add filter in processBatch:**
+```typescript
+// Check minimum cost filter
+const enableMinCostFilter = doc.enableMinimumCostFilter === true;
+const minCost = doc.minimumSeatCost;
+const listingPrice = inventory?.listPrice || 0;
+
+if (enableMinCostFilter && minCost !== null && minCost !== undefined && minCost > 0) {
+  if (listingPrice < minCost) {
+    return false; // Filter out listings below minimum cost
+  }
+}
+```
+
+### Filter Logic
+| Min Cost | Filter Enabled | Listing Price | Included |
+|----------|----------------|---------------|----------|
+| $50 | ON | $75 | ✅ Yes |
+| $50 | ON | $30 | ❌ No |
+| $50 | OFF | $30 | ✅ Yes |
+| null | ON | $30 | ✅ Yes |
+
+### GitHub Commit
+- `36c70fe` - Add minimum seat cost filter for CSV export per event
+
+---
+
+## 2.17 TPTS-049: High Quantity Bonus Markup (Standard Only)
+
+**Purpose:** Add bonus markup for Standard ticket listings with 8+ seats. This is additive to the base Standard markup.
+
+### File 1: `models/eventModel.js`
+
+**ADD these fields:**
+```javascript
+highQuantityThreshold: {
+  type: Number,
+  default: 8,
+  description: "Seat quantity threshold for bonus markup (Standard only)"
+},
+highQuantityBonusMarkup: {
+  type: Number,
+  default: 0,
+  description: "Bonus markup % added when seats >= threshold (Standard only)"
+},
+```
+
+### File 2: `app/dashboard/list-event/NewScraper.jsx`
+
+**In formData state, ADD:**
+```javascript
+highQuantityThreshold: 8,
+highQuantityBonusMarkup: "",
+```
+
+**Add UI section:**
+```jsx
+{/* High Quantity Bonus (Standard Only) */}
+<div className="border-t pt-4 mt-4">
+  <h4 className="text-sm font-medium text-gray-700 mb-3">
+    High Quantity Bonus (Standard Only)
+  </h4>
+  <div className="grid grid-cols-2 gap-4">
+    <div>
+      <label className="block text-sm text-gray-600 mb-1">
+        Threshold (seats)
+      </label>
+      <input
+        type="number"
+        name="highQuantityThreshold"
+        value={formData.highQuantityThreshold}
+        onChange={handleInputChange}
+        min="1"
+        className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+      />
+      <p className="text-xs text-gray-500 mt-1">
+        Apply bonus when seats ≥ this
+      </p>
+    </div>
+    <div>
+      <label className="block text-sm text-gray-600 mb-1">
+        Bonus Markup %
+      </label>
+      <input
+        type="number"
+        name="highQuantityBonusMarkup"
+        value={formData.highQuantityBonusMarkup}
+        onChange={handleInputChange}
+        placeholder="0"
+        min="0"
+        step="0.1"
+        className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+      />
+      <p className="text-xs text-gray-500 mt-1">
+        Added to Standard base markup
+      </p>
+    </div>
+  </div>
+</div>
+```
+
+### File 3: `actions/csvActions.tsx`
+
+**Update aggregation $addFields:**
+```javascript
+highQuantityThreshold: { $ifNull: [{ $arrayElemAt: ['$eventDetails.highQuantityThreshold', 0] }, 8] },
+highQuantityBonusMarkup: { $ifNull: [{ $arrayElemAt: ['$eventDetails.highQuantityBonusMarkup', 0] }, 0] }
+```
+
+**Add markup calculation function:**
+```typescript
+/**
+ * Calculate markup percentage based on ticket type and quantity
+ * High quantity bonus ONLY applies to Standard tickets
+ */
+function calculateMarkupPercentage(
+  isStandard: boolean,
+  quantity: number,
+  doc: ConsecutiveGroupDocument
+): number {
+  const defaultMarkup = doc.priceIncreasePercentage ?? 25;
+  let baseMarkup: number;
+
+  if (isStandard) {
+    baseMarkup = doc.standardMarkup ?? defaultMarkup;
+  } else {
+    baseMarkup = doc.resaleMarkup ?? defaultMarkup;
+  }
+
+  // Add high quantity bonus for Standard tickets only
+  let bonusMarkup = 0;
+  if (isStandard) {
+    const threshold = doc.highQuantityThreshold ?? 8;
+    if (quantity >= threshold) {
+      bonusMarkup = doc.highQuantityBonusMarkup ?? 0;
+    }
+  }
+
+  return baseMarkup + bonusMarkup;
+}
+```
+
+**Update processBatch to use new function:**
+```typescript
+const listingType = doc.inventory?.listingType || 'Standard';
+const isStandard = listingType === 'Standard';
+const quantity = doc.seats?.length || 0;
+
+// Calculate markup based on ticket type and quantity
+const markupPercentage = calculateMarkupPercentage(isStandard, quantity, doc);
+const listPriceWithMarkup = applyMarkup(inventory?.listPrice || 0, markupPercentage);
+```
+
+### Markup Calculation Examples
+
+**Configuration:**
+- Standard Base: 15%
+- Resale Base: 10%
+- Threshold: 8 seats
+- Bonus: 10%
+
+| Type | Qty | Base | Bonus | Total Markup |
+|------|-----|------|-------|--------------|
+| Standard | 4 | 15% | 0% | **15%** |
+| Standard | 8 | 15% | 10% | **25%** |
+| Standard | 12 | 15% | 10% | **25%** |
+| Resale | 4 | 10% | 0% | **10%** |
+| Resale | 8 | 10% | 0% | **10%** |
+| Resale | 12 | 10% | 0% | **10%** |
+
+**Key Point:** Bonus markup ONLY applies to Standard tickets, never to Resale.
+
+### GitHub Commit
+- `0c6f93c` - Add Standard/Resale markup split with high quantity bonus
+
+---
+
 # PART 3: MONGODB MIGRATION SCRIPT
 
 Run this ONCE after deploying both repos:
@@ -1038,6 +1716,44 @@ db.events.findOne({}, {
 - [ ] Verify CSV shows the higher price (Standard), not the lower price (Kids)
 - [ ] Check console logs show correct offer being selected
 
+## TPTS-042: Ticketmaster URL in CSV
+- [ ] Create event with Ticketmaster URL
+- [ ] Generate CSV - verify URL appears in internal_notes field
+- [ ] Verify format: "-tnow -tmplus [notes] [URL]"
+
+## TPTS-043: Multiple Ticketmaster URLs
+- [ ] Create event with primary URL
+- [ ] Add additional URLs with labels (e.g., "Accessible")
+- [ ] Edit event - verify additional URLs persist
+- [ ] Remove an additional URL - verify it's deleted
+
+## TPTS-044: Exclude Standard ≤2 Seats
+- [ ] Generate CSV - verify Standard listings with 1-2 seats are excluded
+- [ ] Verify Standard listings with 3+ seats ARE included
+- [ ] Verify Resale listings with 1-2 seats ARE included (no filter)
+
+## TPTS-047: Standard/Resale CSV Toggles
+- [ ] Events table shows "S" and "R" toggle buttons
+- [ ] Click S button - toggles green/red
+- [ ] Click R button - toggles green/red
+- [ ] Set S=OFF, generate CSV - verify no Standard tickets
+- [ ] Set R=OFF, generate CSV - verify no Resale tickets
+- [ ] Set both ON - verify both types included
+
+## TPTS-048: Minimum Cost Filter
+- [ ] Events table shows "Min $" column
+- [ ] Set minimum cost (e.g., $50) in Edit Event form
+- [ ] Toggle ON in Events table
+- [ ] Generate CSV - verify listings below $50 are excluded
+- [ ] Toggle OFF - verify all listings included regardless of price
+
+## TPTS-049: High Quantity Bonus
+- [ ] Set Standard markup (e.g., 15%) in Edit Event form
+- [ ] Set threshold (e.g., 8 seats) and bonus (e.g., 10%)
+- [ ] Generate CSV - verify Standard 4-seat listing = 15% markup
+- [ ] Verify Standard 8-seat listing = 25% markup (15% + 10%)
+- [ ] Verify Resale 8-seat listing = resale markup only (NO bonus)
+
 ---
 
 # PART 5: FILE INDEX
@@ -1054,6 +1770,18 @@ db.events.findOne({}, {
 | `PLAYWRIGHT-REPO-eventModel-changes.js` | Complete eventModel for playwright |
 | `playwright-seat-stats.patch` | Patch file for seat stats in playwright |
 | `playwright-highest-price.patch` | Patch file for highest price selection |
+
+## Additional Task Documentation (Implemented)
+
+| Task ID | Feature | Key Files Modified |
+|---------|---------|-------------------|
+| TPTS-034 | Resale split type investigation | Investigation only (data in ConsecutiveGroup.inventory.listingType) |
+| TPTS-042 | Ticketmaster URL in CSV | `actions/csvActions.tsx` |
+| TPTS-043 | Multiple URLs per event | `models/eventModel.js`, `app/dashboard/list-event/NewScraper.jsx` |
+| TPTS-044 | Exclude Standard ≤2 seats | `actions/csvActions.tsx` |
+| TPTS-047 | Standard/Resale CSV toggles | `models/eventModel.js`, `actions/eventActions.ts`, `actions/csvActions.tsx`, `EventsTableModern.jsx` |
+| TPTS-048 | Minimum cost filter | `models/eventModel.js`, `actions/eventActions.ts`, `actions/csvActions.tsx`, `NewScraper.jsx`, `EventsTableModern.jsx` |
+| TPTS-049 | High quantity bonus markup | `models/eventModel.js`, `actions/csvActions.tsx`, `NewScraper.jsx` |
 
 ---
 
@@ -1369,5 +2097,6 @@ The auto-refresh feature is designed to stay well within this limit:
 
 ---
 
-**Last Updated:** February 10, 2026
+**Last Updated:** February 12, 2026
 **Branch:** claude/add-monday-api-token-rk25G
+**Tasks Documented:** TPTS-023 through TPTS-049 (26 tasks total)
