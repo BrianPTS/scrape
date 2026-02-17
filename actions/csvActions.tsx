@@ -743,8 +743,8 @@ async function processBatch(batch: ConsecutiveGroupDocument[]): Promise<CsvRow[]
       public_notes: publicNotes,
       tags: (isStandard ? 'STANDARD' : 'RESALE'),
       list_price: Number(listPriceWithMarkup.toFixed(2)),
-      face_price: Number((inventory?.cost || 0).toFixed(2)),
-      taxed_cost: Number((inventory?.cost || 0).toFixed(2)),
+      face_price: Number((inventory?.face_price || inventory?.cost || 0).toFixed(2)),
+      taxed_cost: Number((inventory?.taxed_cost || inventory?.cost || 0).toFixed(2)),
       cost: Number((inventory?.cost || 0).toFixed(2)),
       hide_seats: inventory?.hideSeatNumbers ? "Y" : "N",
       in_hand: "N", // Always set to "N" as per original code
