@@ -205,6 +205,14 @@ interface CsvRow {
   zone: 'Y' | 'N';
   shown_quantity?: number;
   passthrough?: string;
+  // Fee breakdown columns
+  service_fee: number;
+  facility_fee: number;
+  order_processing_fee: number;
+  tax_amount: number;
+  total_fees: number;
+  offer_name: string;
+  inventory_type: string;
 }
 
 const csvColumns = [
@@ -236,6 +244,14 @@ const csvColumns = [
   { id: 'zone', title: 'zone' },
   { id: 'shown_quantity', title: 'shown_quantity' },
   { id: 'passthrough', title: 'passthrough' },
+  // Fee breakdown columns
+  { id: 'service_fee', title: 'service_fee' },
+  { id: 'facility_fee', title: 'facility_fee' },
+  { id: 'order_processing_fee', title: 'order_processing_fee' },
+  { id: 'tax_amount', title: 'tax_amount' },
+  { id: 'total_fees', title: 'total_fees' },
+  { id: 'offer_name', title: 'offer_name' },
+  { id: 'inventory_type', title: 'inventory_type' },
 ];
 
 // Retry configuration
@@ -399,6 +415,16 @@ export async function generateInventoryCsv(eventUpdateFilterMinutes: number = 0)
         'inventory.zone': 1,
         'inventory.shown_quantity': 1,
         'inventory.passthrough': 1,
+        // Fee breakdown fields
+        'inventory.totalPrice': 1,
+        'inventory.noChargesPrice': 1,
+        'inventory.serviceFee': 1,
+        'inventory.facilityFee': 1,
+        'inventory.orderProcessingFee': 1,
+        'inventory.taxAmount': 1,
+        'inventory.totalFees': 1,
+        'inventory.offerName': 1,
+        'inventory.inventoryType': 1,
       };
 
       // Enhanced cursor with better memory management and parallel processing
@@ -528,6 +554,16 @@ interface ConsecutiveGroupDocument {
     zone?: boolean;
     shown_quantity?: number;
     passthrough?: string;
+    // Fee breakdown fields
+    totalPrice?: number;
+    noChargesPrice?: number;
+    serviceFee?: number;
+    facilityFee?: number;
+    orderProcessingFee?: number;
+    taxAmount?: number;
+    totalFees?: number;
+    offerName?: string;
+    inventoryType?: string;
   };
   event_name?: string;
   venue_name?: string;
@@ -615,6 +651,11 @@ async function processBatch(batch: ConsecutiveGroupDocument[]): Promise<CsvRow[]
       ? (existingPublicNotes ? `${existingPublicNotes} - STANDING ROOM ONLY` : 'STANDING ROOM ONLY')
       : existingPublicNotes;
 
+    // Use totalPrice (per-ticket buyer cost) as the source of truth for cost fields
+    // face_price uses the actual face value from the API (not the total cost)
+    const perTicketCost = inventory?.totalPrice || (inventory?.cost ? inventory.cost / (inventory?.quantity || 1) : 0);
+    const actualFaceValue = inventory?.face_price || perTicketCost;
+
     return {
       inventory_id: inventory?.inventoryId || 0,
       event_name: doc.event_name || '',
@@ -630,11 +671,11 @@ async function processBatch(batch: ConsecutiveGroupDocument[]): Promise<CsvRow[]
       public_notes: publicNotes,
       tags: (inventory?.splitType === 'NEVERLEAVEONE' ? 'STANDARD' : 'RESALE'),
       list_price: Number(applyPriceIncrease(inventory?.listPrice || 0).toFixed(2)),
-      face_price: Number((inventory?.cost || 0).toFixed(2)),
-      taxed_cost: Number((inventory?.cost || 0).toFixed(2)),
-      cost: Number((inventory?.cost || 0).toFixed(2)),
+      face_price: Number(actualFaceValue.toFixed(2)),
+      taxed_cost: Number(perTicketCost.toFixed(2)),
+      cost: Number(perTicketCost.toFixed(2)),
       hide_seats: inventory?.hideSeatNumbers ? "Y" : "N",
-      in_hand: "N", // Always set to "N" as per original code
+      in_hand: "N",
       in_hand_date: inHandDateString,
       instant_transfer: inventory?.instant_transfer ? "Y" : "N",
       files_available: "N",
@@ -643,7 +684,15 @@ async function processBatch(batch: ConsecutiveGroupDocument[]): Promise<CsvRow[]
       stock_type: (inventory?.stockType as CsvRow['stock_type']) || "ELECTRONIC",
       zone: "N",
       shown_quantity: inventory?.shown_quantity || undefined,
-      passthrough: inventory?.passthrough || ''
+      passthrough: inventory?.passthrough || '',
+      // Fee breakdown
+      service_fee: Number((inventory?.serviceFee || 0).toFixed(2)),
+      facility_fee: Number((inventory?.facilityFee || 0).toFixed(2)),
+      order_processing_fee: Number((inventory?.orderProcessingFee || 0).toFixed(2)),
+      tax_amount: Number((inventory?.taxAmount || 0).toFixed(2)),
+      total_fees: Number((inventory?.totalFees || 0).toFixed(2)),
+      offer_name: inventory?.offerName || '',
+      inventory_type: inventory?.inventoryType || '',
     } as CsvRow;
   });
 }

@@ -170,6 +170,34 @@ const consecutiveGroupSchema = new mongoose.Schema(
       taxed_cost: {
         type: Number,
       },
+      // --- Fee breakdown fields (from Ticketmaster API) ---
+      totalPrice: {
+        type: Number,  // API's totalPrice per ticket (buyer's actual cost, source of truth)
+      },
+      noChargesPrice: {
+        type: Number,  // API's noChargesPrice (true base price before any fees)
+      },
+      serviceFee: {
+        type: Number,  // Service charge amount per ticket
+      },
+      facilityFee: {
+        type: Number,  // Facility fee amount per ticket
+      },
+      orderProcessingFee: {
+        type: Number,  // Order processing fee (per order, stored as per-ticket share)
+      },
+      taxAmount: {
+        type: Number,  // face_value_tax amount per ticket
+      },
+      totalFees: {
+        type: Number,  // totalPrice - faceValue (all fees combined, catches unknown fee types)
+      },
+      offerName: {
+        type: String,  // e.g. "Standard Admission", "Club Seating + $25 Club Fee"
+      },
+      inventoryType: {
+        type: String,  // "primary" or "resale"
+      },
       in_hand: {
         type: Boolean,
       },
