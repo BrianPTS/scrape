@@ -45,6 +45,10 @@ const eventSchema = new mongoose.Schema(
       type: Number,
       default: 25, // Default 25% markup
     },
+    firstRowPriceIncreasePercentage: {
+      type: Number,
+      default: 0, // Additional % markup for first row of non-upper sections
+    },
     Last_Updated: {
       type: Date,
       default: Date.now,

@@ -20,6 +20,7 @@ interface EventType {
   Skip_Scraping?: boolean;
   inHandDate?: string;
   priceIncreasePercentage?: number;
+  firstRowPriceIncreasePercentage?: number;
   Last_Updated?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -276,6 +277,21 @@ export default async function EventDetailsPage({ params }: EventDetailsProps) {
                       <div className="text-sm font-medium text-slate-600">Price Increase</div>
                       <div className="text-3xl font-bold text-slate-800">
                         {event.priceIncreasePercentage ?? 25}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-5 bg-orange-50 rounded-xl">
+                  <div className="flex items-center gap-4">
+                    <TrendingUp className="text-orange-600" size={24} />
+                    <div>
+                      <div className="text-sm font-medium text-slate-600">First Row Additional %</div>
+                      <div className="text-3xl font-bold text-slate-800">
+                        {event.firstRowPriceIncreasePercentage ?? 0}%
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        Excludes upper level sections
                       </div>
                     </div>
                   </div>

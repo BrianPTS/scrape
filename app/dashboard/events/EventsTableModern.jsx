@@ -164,22 +164,43 @@ const EventsTableModern = memo(function EventsTableModern({
         );
       }
     },
-    { 
-      name: <Header title="Price %" description="Price increase percentage" />, 
-      selector: r => r.priceIncreasePercentage, 
-      right: true, 
-      sortable: true, 
+    {
+      name: <Header title="Price %" description="Price increase percentage" />,
+      selector: r => r.priceIncreasePercentage,
+      right: true,
+      sortable: true,
       width: '90px',
       cell: r => {
         const percentage = r.priceIncreasePercentage ?? 0;
         return (
           <div className="text-right">
             <span className={`font-bold text-sm px-2 py-1 rounded-full ${
-              percentage > 0 
-                ? 'bg-red-50 text-red-700' 
-                : percentage < 0 
-                  ? 'bg-blue-50 text-blue-700' 
+              percentage > 0
+                ? 'bg-red-50 text-red-700'
+                : percentage < 0
+                  ? 'bg-blue-50 text-blue-700'
                   : 'bg-slate-50 text-slate-700'
+            }`}>
+              {percentage > 0 ? '+' : ''}{percentage}%
+            </span>
+          </div>
+        );
+      }
+    },
+    {
+      name: <Header title="1st Row %" description="Additional markup for first row (non-upper)" />,
+      selector: r => r.firstRowPriceIncreasePercentage,
+      right: true,
+      sortable: true,
+      width: '100px',
+      cell: r => {
+        const percentage = r.firstRowPriceIncreasePercentage ?? 0;
+        return (
+          <div className="text-right">
+            <span className={`font-bold text-sm px-2 py-1 rounded-full ${
+              percentage > 0
+                ? 'bg-orange-50 text-orange-700'
+                : 'bg-slate-50 text-slate-700'
             }`}>
               {percentage > 0 ? '+' : ''}{percentage}%
             </span>

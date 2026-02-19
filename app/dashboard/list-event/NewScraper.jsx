@@ -29,6 +29,7 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
     inHandDate: "",
     mapping_id: "",
     Percentage_Increase_ListCost: 0,
+    First_Row_Percentage_Increase: 0,
   });
 
   // Load initial data for edit mode
@@ -52,6 +53,7 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
         inHandDate: formatDateForInput(initialData.inHandDate),
         mapping_id: initialData.mapping_id || "",
         Percentage_Increase_ListCost: initialData.priceIncreasePercentage || 0,
+        First_Row_Percentage_Increase: initialData.firstRowPriceIncreasePercentage || 0,
       });
     }
   }, [isEdit, initialData]);
@@ -69,6 +71,7 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
     inHandDate: true,
     mapping_id: true,
     Percentage_Increase_ListCost: true,
+    First_Row_Percentage_Increase: true,
   });
   const [touchedFields, setTouchedFields] = useState({
     URL: false,
@@ -80,6 +83,7 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
     inHandDate: false,
     mapping_id: false,
     Percentage_Increase_ListCost: false,
+    First_Row_Percentage_Increase: false,
   });
 
   // Helper function to check if hostname is a Ticketmaster domain
@@ -279,6 +283,7 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
       inHandDate: Boolean(formData.inHandDate),
       mapping_id: formData.mapping_id.length > 0,
       Percentage_Increase_ListCost: formData.Percentage_Increase_ListCost >= 0,
+      First_Row_Percentage_Increase: formData.First_Row_Percentage_Increase >= 0,
     };
 
     setValidationState(validation);
@@ -293,6 +298,7 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
       inHandDate: true,
       mapping_id: true,
       Percentage_Increase_ListCost: true,
+      First_Row_Percentage_Increase: true,
     });
     return Object.values(validation).every(Boolean);
   };
@@ -416,6 +422,7 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
         inHandDate: formData.inHandDate,
         mapping_id: formData.mapping_id,
         priceIncreasePercentage: formData.Percentage_Increase_ListCost,
+        firstRowPriceIncreasePercentage: formData.First_Row_Percentage_Increase,
       };
 
       let result;
@@ -423,7 +430,9 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
         // Check if price percentage has changed
         const originalPercentage = initialData.priceIncreasePercentage || 0;
         const newPercentage = formData.Percentage_Increase_ListCost;
-        const percentageChanged = originalPercentage !== newPercentage;
+        const originalFirstRowPercentage = initialData.firstRowPriceIncreasePercentage || 0;
+        const newFirstRowPercentage = formData.First_Row_Percentage_Increase;
+        const percentageChanged = originalPercentage !== newPercentage || originalFirstRowPercentage !== newFirstRowPercentage;
         
         result = await updateEvent(initialData._id, eventData, percentageChanged);
         
@@ -991,6 +1000,63 @@ const NewScraper = ({ onCancel, onSuccess, initialData = null, isEdit = false })
                 )}
               <p className="mt-1 text-xs text-gray-500">
                 Percentage to increase the list cost by
+              </p>
+            </div>
+
+            {/* First Row Percentage Increase Field */}
+            <div>
+              <label
+                htmlFor="First_Row_Percentage_Increase"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                First Row Additional %
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Tag className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="First_Row_Percentage_Increase"
+                  name="First_Row_Percentage_Increase"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.First_Row_Percentage_Increase}
+                  onChange={handleInputChange}
+                  onBlur={handleBlur}
+                  placeholder="Enter additional first row %"
+                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${
+                    !validationState.First_Row_Percentage_Increase &&
+                    touchedFields.First_Row_Percentage_Increase
+                      ? "border-red-500 bg-red-50"
+                      : validationState.First_Row_Percentage_Increase &&
+                        formData.First_Row_Percentage_Increase
+                      ? "border-green-500 bg-green-50"
+                      : "border-gray-300"
+                  }`}
+                  disabled={loading}
+                />
+                {touchedFields.First_Row_Percentage_Increase &&
+                  (validationState.First_Row_Percentage_Increase &&
+                  formData.First_Row_Percentage_Increase ? (
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                    </div>
+                  ) : !validationState.First_Row_Percentage_Increase ? (
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                      <AlertCircle className="h-5 w-5 text-red-500" />
+                    </div>
+                  ) : null)}
+              </div>
+              {!validationState.First_Row_Percentage_Increase &&
+                touchedFields.First_Row_Percentage_Increase && (
+                  <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    Please enter a valid percentage (0 or greater)
+                  </p>
+                )}
+              <p className="mt-1 text-xs text-gray-500">
+                Additional % added on top of base markup for first row seats (excludes upper level)
               </p>
             </div>
           </div>

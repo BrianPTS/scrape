@@ -80,7 +80,7 @@ export async function getAllEvents(): Promise<Array<object>> {
  * @param {boolean} deleteSeatGroups - Whether to delete associated seat groups on certain updates.
  * @returns {Promise<object|null>} The updated event object or null if not found, or an error object.
  */
-export async function updateEvent(eventId: string, updateData: Partial<Event> & { Skip_Scraping?: boolean; priceIncreasePercentage?: number }, deleteSeatGroups: boolean = false) {
+export async function updateEvent(eventId: string, updateData: Partial<Event> & { Skip_Scraping?: boolean; priceIncreasePercentage?: number; firstRowPriceIncreasePercentage?: number }, deleteSeatGroups: boolean = false) {
   // Input validation
   if (!eventId || typeof eventId !== 'string') {
     return { error: 'Invalid event ID provided' };
@@ -105,15 +105,19 @@ export async function updateEvent(eventId: string, updateData: Partial<Event> & 
       newSkipScraping: updateData.Skip_Scraping,
       currentPercentage: currentEvent.priceIncreasePercentage,
       newPercentage: updateData.priceIncreasePercentage,
+      currentFirstRowPercentage: currentEvent.firstRowPriceIncreasePercentage,
+      newFirstRowPercentage: updateData.firstRowPriceIncreasePercentage,
       deleteSeatGroups
     });
 
     // Check if we're stopping scraping (going from false/undefined to true) or updating price percentage
     const isStoppingScraping = updateData.Skip_Scraping === true && !currentEvent.Skip_Scraping;
-    const isUpdatingPercentage = updateData.priceIncreasePercentage !== undefined && 
+    const isUpdatingPercentage = updateData.priceIncreasePercentage !== undefined &&
                                 updateData.priceIncreasePercentage !== currentEvent.priceIncreasePercentage;
-    
-    const shouldDeleteSeats = deleteSeatGroups || isStoppingScraping || isUpdatingPercentage;
+    const isUpdatingFirstRowPercentage = updateData.firstRowPriceIncreasePercentage !== undefined &&
+                                updateData.firstRowPriceIncreasePercentage !== currentEvent.firstRowPriceIncreasePercentage;
+
+    const shouldDeleteSeats = deleteSeatGroups || isStoppingScraping || isUpdatingPercentage || isUpdatingFirstRowPercentage;
 
     console.log('Seat Deletion Logic:', {
       isStoppingScraping,
