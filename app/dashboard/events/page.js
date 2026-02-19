@@ -1,5 +1,6 @@
 "use client"
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { getAllEvents, updateEvent, updateAllEvents, deleteEvent } from '@/actions/eventActions';
 import { Calendar, ChevronLeft, ChevronRight, RefreshCw, Search, X, SlidersHorizontal } from 'lucide-react';
 import EventsTableModern from './EventsTableModern.jsx';
@@ -808,9 +809,9 @@ export default function EventsPage() {
         )}
       </div>
 
-      {/* Confirmation Dialog */}
-      {showConfirmDialog && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+      {/* Confirmation Dialog - rendered via portal to escape overflow containers */}
+      {showConfirmDialog && createPortal(
+        <div className="fixed inset-0 bg-gray-600/50 z-[9999] flex items-center justify-center">
           <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="p-6">
               <div className="flex items-center justify-center w-12 h-12 mx-auto bg-yellow-100 rounded-full mb-4">
@@ -823,7 +824,7 @@ export default function EventsPage() {
                   {allActive ? 'Stop All Scraping?' : 'Start All Scraping?'}
                 </h3>
                 <p className="text-sm text-gray-500 mb-6">
-                  {allActive 
+                  {allActive
                     ? 'This will stop scraping for all events and may delete associated seat data. This action cannot be undone.'
                     : 'This will start scraping for all events. Are you sure you want to proceed?'
                   }
@@ -838,7 +839,7 @@ export default function EventsPage() {
                   <button
                     onClick={confirmToggleScrapingAll}
                     className={`px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                      allActive 
+                      allActive
                         ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
                         : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
                     }`}
@@ -849,12 +850,13 @@ export default function EventsPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Delete Event Confirmation Dialog */}
-      {showDeleteDialog && eventToDelete && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+      {/* Delete Event Confirmation Dialog - rendered via portal to escape overflow containers */}
+      {showDeleteDialog && eventToDelete && createPortal(
+        <div className="fixed inset-0 bg-gray-600/50 z-[9999] flex items-center justify-center">
           <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="p-6">
               <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full mb-4">
@@ -888,7 +890,8 @@ export default function EventsPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import {
   createProxy,
   updateProxy,
@@ -362,8 +363,8 @@ export function BulkActions({ onRefresh }: { onRefresh: () => void }) {
       )}
 
       {/* Add Single Proxy Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      {showAddModal && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <div className="bg-white p-6 rounded-xl w-full max-w-md shadow-2xl">
             <h2 className="text-xl font-bold mb-4">Add New Proxy</h2>
 
@@ -418,13 +419,14 @@ export function BulkActions({ onRefresh }: { onRefresh: () => void }) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Bulk Import Modal */}
-      {showBulkModal && (
+      {showBulkModal && createPortal(
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4"
           role="dialog"
           aria-modal="true"
         >
@@ -739,7 +741,8 @@ export function BulkActions({ onRefresh }: { onRefresh: () => void }) {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

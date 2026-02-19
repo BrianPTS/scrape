@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import moment from 'moment';
 import { Download, Upload } from 'lucide-react';
 import { generateInventoryCsv, uploadCsvToSyncService } from '../../../actions/csvActions';
@@ -933,8 +934,8 @@ const ExportCsvPage: React.FC = () => {
       </div>
 
       {/* Clear All Inventory Confirmation Dialog */}
-      {showClearInventoryDialog && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+      {showClearInventoryDialog && createPortal(
+        <div className="fixed inset-0 bg-gray-600/50 z-[9999] flex items-center justify-center">
           <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="p-6">
               <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full mb-4">
@@ -967,12 +968,13 @@ const ExportCsvPage: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Clear Stale Inventory Confirmation Dialog */}
-      {showStaleCleanupDialog && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+      {showStaleCleanupDialog && createPortal(
+        <div className="fixed inset-0 bg-gray-600/50 z-[9999] flex items-center justify-center">
           <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="p-6">
               <div className="flex items-center justify-center w-12 h-12 mx-auto bg-yellow-100 rounded-full mb-4">
@@ -1006,12 +1008,13 @@ const ExportCsvPage: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Auto-Delete Preview Dialog */}
-      {showAutoDeletePreview && autoDeletePreview && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+      {showAutoDeletePreview && autoDeletePreview && createPortal(
+        <div className="fixed inset-0 bg-gray-600/50 z-[9999] flex items-center justify-center overflow-y-auto">
           <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -1097,7 +1100,8 @@ const ExportCsvPage: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -104,8 +104,9 @@ body {
   scrollbar-color: #cbd5e1 transparent;
 }
 
-/* Smooth transitions for specific properties */
-* {
+/* Smooth transitions for interactive elements only */
+a, button, input, select, textarea,
+.task-card, .team-avatar, .chart-bar, .status-indicator {
   transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, transform;
   transition-duration: 150ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
